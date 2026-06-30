@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply transition-colors duration-300;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(13, 59, 46, 0.1);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d4af37;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #b08d1a;
+}
+
+/* Ancient Theme Styles */
+.bg-parchment-texture {
+  background-color: #f9f6f0;
+  background-image: radial-gradient(rgba(74, 44, 17, 0.05) 1px, transparent 0),
+                    radial-gradient(rgba(74, 44, 17, 0.05) 1px, transparent 0);
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
+}
+
+.dark .bg-parchment-texture {
+  background-color: #082920;
+  background-image: radial-gradient(rgba(212, 175, 55, 0.03) 1px, transparent 0),
+                    radial-gradient(rgba(212, 175, 55, 0.03) 1px, transparent 0);
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
+}
+
+/* Glassmorphism Temple Panel */
+.glass-panel {
+  background: rgba(249, 246, 240, 0.85);
+  backdrop-filter: blur(12px);
+  border: 2px solid rgba(214, 175, 55, 0.3);
+  box-shadow: 0 8px 32px 0 rgba(13, 59, 46, 0.1);
+}
+
+.dark .glass-panel {
+  background: rgba(13, 59, 46, 0.85);
+  backdrop-filter: blur(12px);
+  border: 2px solid rgba(214, 175, 55, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+}
+
+/* Gold Glowing Text */
+.text-gold-glow {
+  text-shadow: 0 0 10px rgba(212, 175, 55, 0.6), 0 0 20px rgba(212, 175, 55, 0.3);
+}
+
+/* Jade Glowing Border */
+.border-jade-glow {
+  box-shadow: 0 0 15px rgba(27, 77, 62, 0.4);
+}
+
+.dark .border-jade-glow {
+  box-shadow: 0 0 15px rgba(49, 95, 82, 0.6);
+}
+
+/* Keyframes for Chinese Lantern Sway */
+@keyframes lanternSway {
+  0% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+  100% { transform: rotate(-3deg); }
+}
+
+.animate-lantern {
+  animation: lanternSway 4s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+/* Pulse animation for active tiles */
+@keyframes activePulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0px rgba(212, 175, 55, 0.7); }
+  50% { transform: scale(1.05); box-shadow: 0 0 0 8px rgba(212, 175, 55, 0); }
+}
+
+.animate-active-tile {
+  animation: activePulse 2s infinite;
+}
+
+/* Floating animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
