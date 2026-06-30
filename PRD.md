@@ -352,6 +352,3 @@ From `frontend/`:
 
 ---
 
-## Document Owner
-
-Generated for the `Word Game` workspace by GitHub Copilot.
