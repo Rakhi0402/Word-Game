@@ -42,8 +42,8 @@ Public auth routes are `/login` and `/register`.
 
 ## Core Features
 
-1. **Authentication
-**
+1. **Authentication**
+
    - Mock login and registration via `frontend/src/services/authService.ts`
    - Local storage persistence for user credentials and auth state
    - `ProtectedRoute` protects authenticated pages
