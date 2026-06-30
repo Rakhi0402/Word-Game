@@ -348,7 +348,7 @@ From `frontend/`:
 
 - Product documentation for current implementation
 - Workflow diagrams for auth, game, and data flows
-- Recommendations for technical cleanup and backend enablement
+
 
 ---
 
