@@ -241,8 +241,8 @@ export const Profile: React.FC = () => {
       </div>
 
       {/* Achievement Summary Section */}
-      <Card variant="parchment" className="border border-gold/25 shadow-xl">
-        <div className="border-b border-gold/15 pb-3 mb-5 flex items-center justify-between">
+      <Card variant="glass" className="border border-gold/25 shadow-xl">
+        <div className="border-b border-gold/25 pb-3 mb-5 flex items-center justify-between">
           <h3 className="text-base font-extrabold text-gold-dark dark:text-gold uppercase tracking-wider font-martial flex items-center gap-2">
             <Trophy className="h-5 w-5 text-gold" /> Sacred Medals (Achievements)
           </h3>
@@ -261,7 +261,7 @@ export const Profile: React.FC = () => {
                   p-4 rounded-2xl border flex flex-col sm:flex-row items-center sm:items-start gap-4 transition-all duration-200
                   ${ach.unlocked 
                     ? 'bg-gold/10 border-gold/30 dark:bg-jade-gold/20' 
-                    : 'bg-jade-dark/5 border-gold/10 dark:bg-black/10 opacity-70'
+                    : 'bg-jade-dark/5 border-gold/10 dark:bg-black/15 opacity-80'
                   }
                 `}
               >

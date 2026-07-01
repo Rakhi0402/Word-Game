@@ -133,7 +133,7 @@ export const Collection: React.FC = () => {
       />
 
       {/* Cards Grid */}
-      <div className="grid gap-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      <div className="grid gap-20 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {filteredCards.map((card) => {
           const unlocked = isUnlocked(card.id);
           const equipped = isEquipped(card.id);
@@ -151,10 +151,10 @@ export const Collection: React.FC = () => {
                   }
                 }}
                 className={`
-                  relative flex flex-col items-center p-1 rounded-2xl border-2 transition-all duration-300 select-none cursor-pointer
+                  relative flex flex-col items-center p-1 rounded-2xl transition-all duration-300 select-none cursor-pointer
                   ${unlocked 
-                    ? 'border-gold bg-parchment/40 dark:bg-jade-gold/20 hover:scale-105 hover:shadow-xl' 
-                    : 'border-jade-dark/20 dark:border-parchment/10 bg-jade-dark/10 opacity-40 cursor-not-allowed'
+                    ? 'border-gold hover:scale-105 hover:shadow-xl' 
+                    : 'opacity-40 cursor-not-allowed'
                   }
                 `}
               >

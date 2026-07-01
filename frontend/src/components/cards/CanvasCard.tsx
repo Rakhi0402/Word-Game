@@ -34,25 +34,7 @@ export const CanvasCard: React.FC<CanvasCardProps> = ({
     ctx.clearRect(0, 0, width, height);
 
     const cornerRadius = 22;
-    //const borderThickness = 6;
-    //const innerPadding = 12;
-
-    /*// Card background
-    const backgroundGradient = ctx.createLinearGradient(0, 0, 0, height);
-    backgroundGradient.addColorStop(0, '#111827');
-    backgroundGradient.addColorStop(1, '#0f172a');
-    ctx.fillStyle = backgroundGradient;
-    ctx.beginPath();
-    ctx.roundRect(0, 0, width, height, cornerRadius);
-    ctx.fill();
     
-    // Outer border
-    ctx.strokeStyle = '#d4af37';
-    ctx.lineWidth = borderThickness;
-    ctx.beginPath();
-    ctx.roundRect(borderThickness / 2, borderThickness / 2, width - borderThickness, height - borderThickness, cornerRadius);
-    ctx.stroke();
-*/
     // Character illustration area
     const imagePadding =  2;
     const imageX = imagePadding;
@@ -102,10 +84,10 @@ export const CanvasCard: React.FC<CanvasCardProps> = ({
         width={width}
         height={height}
         onClick={interactive ? handleDownload : undefined}
-        className="rounded-2xl cursor-pointer shadow-lg select-none"
+        className="rounded-2xl cursor-pointer select-none"
       />
       {interactive && (
-        <span className="absolute bottom-4 right-4 bg-gold/90 text-jade-dark text-[8px] font-black uppercase px-2 py-0.5 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <span className="absolute bottom-4 right-4 bg-gold/90 text-jade-dark text-[8px] font-black uppercase px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           Save 💾
         </span>
       )}

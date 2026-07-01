@@ -32,7 +32,7 @@ export const Button: React.FC<ButtonProps> = ({
   const variants = {
     primary: 'bg-gold border-gold-dark text-jade-dark hover:bg-gold-light hover:brightness-105 active:border-b-0 active:mt-[4px]',
     secondary: 'bg-jade border-jade-dark text-parchment hover:bg-jade-light active:border-b-0 active:mt-[4px]',
-    outline: 'border-2 border-gold text-gold bg-transparent hover:bg-gold/10 hover:border-gold-light active:border-b-0 active:mt-[4px]',
+    outline: 'border-2 border-gold text-gold bg-wood hover:bg-wood/30 hover:border-gold-light active:border-b-0 active:mt-[4px]',
     danger: 'bg-red-600 border-red-800 text-white hover:bg-red-500 active:border-b-0 active:mt-[4px]',
     ghost: 'bg-transparent border-transparent text-parchment/70 hover:text-parchment hover:bg-parchment/10 active:border-b-0 active:mt-[4px]',
   };

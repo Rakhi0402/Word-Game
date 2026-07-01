@@ -14,12 +14,18 @@ export const puzzleService = {
   submitWord: async (
     puzzleId: string,
     word: string
-  ): Promise<ApiResponse<{ valid: boolean; points: number }>> => {
+  ): Promise<ApiResponse<{ valid: boolean; points: number; isPangram: boolean }>> => {
     await delay(300);
     const puzzle = DAILY_PUZZLES.find(p => p.id === puzzleId);
-    if (!puzzle) return { success: false, data: { valid: false, points: 0 }, message: 'Puzzle not found' };
+    if (!puzzle) return { success: false, data: { valid: false, points: 0, isPangram: false }, message: 'Puzzle not found' };
     const clean = word.trim().toUpperCase();
     const valid = puzzle.validWords.includes(clean);
-    return { success: true, data: { valid, points: valid ? clean.length * 10 : 0 } };
+    const pangram = valid
+      ? puzzle.letters.every((letter) => clean.includes(letter))
+      : false;
+    return {
+      success: true,
+      data: { valid, points: valid ? clean.length * 10 : 0, isPangram: pangram },
+    };
   },
 };

@@ -27,10 +27,10 @@ export const Home: React.FC = () => {
       {/* Welcome Banner */}
       <div className="flex flex-col items-center justify-between gap-4 md:flex-row md:items-start">
         <div>
-          <h2 className="text-3xl font-extrabold text-gold text-gold-glow uppercase font-martial tracking-wider">
+          <h2 className="text-3xl font-extrabold text-black text-gold-glow  dark:text-gold uppercase font-martial tracking-wider">
             Dojo Dashboard
           </h2>
-          <p className="text-sm text-jade-dark/70 dark:text-parchment/70 font-medium">
+          <p className="text-sm text-jade-dark/80 dark:text-parchment/70 font-medium">
             Welcome back, <span className="font-bold text-gold">{user.username}</span>. Sharpen your mind for today's words.
           </p>
         </div>
@@ -160,10 +160,10 @@ export const Home: React.FC = () => {
         ].map((stat, idx) => {
           const Icon = stat.icon;
           return (
-            <Card key={idx} variant="glass" className="flex flex-col items-center justify-center p-4 text-center border border-gold/15">
+            <Card key={idx} variant="jade" className="flex flex-col items-center justify-center p-4 text-center border border-gold/15">
               <Icon className={`h-6 w-6 mb-2 ${stat.color}`} />
-              <span className="text-2xl font-extrabold text-jade-dark dark:text-parchment tracking-wider">{stat.value}</span>
-              <span className="text-[10px] font-bold text-jade-dark/60 dark:text-parchment/60 uppercase tracking-widest mt-1">
+              <span className="text-2xl font-extrabold text-white dark:text-parchment tracking-wider">{stat.value}</span>
+              <span className="text-[10px] font-bold text-white/60 dark:text-parchment/60 uppercase tracking-widest mt-1">
                 {stat.label}
               </span>
             </Card>

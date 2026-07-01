@@ -11,6 +11,8 @@ const defaultUser: User = {
   xpNeeded: 100,
   coins: 50,
   streak: 1,
+  dailyStreak: 1,
+  characterMultiplier: 1,
   rank: 'Novice Disciple',
   stats: { wordsFound: 0, cardsCollected: 1, achievementsEarned: 0, highestScore: 0, daysPlayed: 0, puzzlesCompleted: 0 },
 };
@@ -65,6 +67,10 @@ const userSlice = createSlice({
       state.stats.wordsFound += 1;
       persist(state);
     },
+    addWordsFound(state, action: PayloadAction<number>) {
+      state.stats.wordsFound += action.payload;
+      persist(state);
+    },
     updateHighestScore(state, action: PayloadAction<number>) {
       if (action.payload > state.stats.highestScore) state.stats.highestScore = action.payload;
       persist(state);
@@ -95,7 +101,7 @@ const userSlice = createSlice({
 
 export const {
   setUserProfile, addXp, addCoins, deductCoins,
-  incrementWordsFound, updateHighestScore, incrementCardsCount,
+  incrementWordsFound, addWordsFound, updateHighestScore, incrementCardsCount,
   incrementAchievementsCount, incrementPuzzlesCompleted, incrementStreak, resetUser,
 } = userSlice.actions;
 

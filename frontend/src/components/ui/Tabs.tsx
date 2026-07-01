@@ -38,7 +38,7 @@ export const Tabs: React.FC<TabsProps> = ({
             className={`
               px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 border-b-2 font-martial
               ${isActive 
-                ? 'border-gold text-gold text-gold-glow' 
+                ? 'border-gold text-black text-gold-glow' 
                 : 'border-transparent text-jade-dark/80 dark:text-parchment/60 hover:text-gold hover:border-gold/30'
               }
             `}

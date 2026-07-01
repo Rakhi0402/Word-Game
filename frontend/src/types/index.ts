@@ -17,6 +17,8 @@ export interface User {
   xpNeeded: number;
   coins: number;
   streak: number;
+  dailyStreak: number;
+  characterMultiplier: number;
   rank: string; // e.g., "Novice", "Disciple", "Warrior", "Grandmaster"
   stats: UserStats;
 }
@@ -53,11 +55,18 @@ export interface Achievement {
   iconName: string;
 }
 
+export interface FoundWord {
+  text: string;
+  score: number;
+  isPangram: boolean;
+}
+
 export interface DailyPuzzle {
   id: string;
   letters: string[]; // 7 letters
   centerLetter: string;
   validWords: string[]; // Words that can be made with these letters containing the center letter
+  pangrams?: string[];
   difficulty: 'Easy' | 'Medium' | 'Hard' | 'Expert';
   xpReward: number;
   coinReward: number;
