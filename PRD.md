@@ -4,11 +4,7 @@
 
 **Name:** Kung Fu Word Quest
 
-**Type:** React + TypeScript single-page app built with Vite
-
 **Scope:** A gamified word puzzle experience where authenticated users complete daily letter-wheel puzzles, collect character cards, earn XP, unlock achievements, and compete on a leaderboard.
-
-**Platform:** Frontend-only application using localStorage-backed mock services; no external backend is implemented.
 
 ---
 
@@ -46,8 +42,8 @@ Public auth routes are `/login` and `/register`.
 
 ## Core Features
 
-1. **Authentication
-**
+1. **Authentication**
+
    - Mock login and registration via `frontend/src/services/authService.ts`
    - Local storage persistence for user credentials and auth state
    - `ProtectedRoute` protects authenticated pages
@@ -116,6 +112,8 @@ Public auth routes are `/login` and `/register`.
 
 ### Tech Stack
 
+##### Frontend
+
 - React 19
 - TypeScript 6
 - Vite
@@ -123,6 +121,12 @@ Public auth routes are `/login` and `/register`.
 - React Router DOM 7
 - Tailwind CSS
 - Lucide icons
+
+##### Backend
+- Java
+- SpringBoot
+- PostgreSQL
+- Redis(Caching)
 
 ### Key Modules
 
@@ -348,10 +352,7 @@ From `frontend/`:
 
 - Product documentation for current implementation
 - Workflow diagrams for auth, game, and data flows
-- Recommendations for technical cleanup and backend enablement
+
 
 ---
 
-## Document Owner
-
-Generated for the `Word Game` workspace by GitHub Copilot.
