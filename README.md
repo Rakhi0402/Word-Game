@@ -13,8 +13,6 @@ A polished word-puzzle game frontend built with React, TypeScript, Vite, Redux T
 ## Project Structure
 
 - frontend/ — React application source code
-- background/ — background assets
-- card pack/ — card artwork and assets
 - PRD.md — product requirements document
 - FRONTEND_ARCHITECTURE.md — frontend architecture notes
 - BACKEND_ARCHITECTURE.md — proposed backend architecture plan
