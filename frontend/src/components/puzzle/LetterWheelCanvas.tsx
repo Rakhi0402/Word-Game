@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { playSound } from "../../utils/audio";
 import { useAppSelector } from "../../store";
 
@@ -28,7 +28,7 @@ export const LetterWheelCanvas: React.FC<Props> = ({
   const soundEnabled = useAppSelector((s) => s.settings.sound);
   const [activeNode, setActiveNode] = useState<number | null>(null);
 
-  const draw = () => {
+  const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -113,12 +113,14 @@ export const LetterWheelCanvas: React.FC<Props> = ({
       ctx.textBaseline = "middle";
       ctx.fillText(node.letter, node.x, node.y + 1);
     });
-  };
-
-  useEffect(draw, [centerLetter, outerLetters, activeNode, disabled]);
+  }, [activeNode, centerLetter, disabled, outerLetters]);
 
   useEffect(() => {
-    const observer = new MutationObserver(draw);
+    draw();
+  }, [draw]);
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => draw());
 
     observer.observe(document.documentElement, {
       attributes: true,
@@ -126,7 +128,7 @@ export const LetterWheelCanvas: React.FC<Props> = ({
     });
 
     return () => observer.disconnect();
-  }, [centerLetter, outerLetters, disabled]);
+  }, [draw]);
 
   const interact = (clientX: number, clientY: number) => {
     if (disabled) return;

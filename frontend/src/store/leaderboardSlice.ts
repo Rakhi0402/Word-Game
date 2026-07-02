@@ -19,7 +19,9 @@ const initialState: LeaderboardState = (() => {
   try {
     const saved = localStorage.getItem('kungfu_leaderboard');
     if (saved) return JSON.parse(saved);
-  } catch (_) {}
+  } catch (error) {
+    void error;
+  }
   return { entries: mockEntries, currentUserRank: 6 };
 })();
 

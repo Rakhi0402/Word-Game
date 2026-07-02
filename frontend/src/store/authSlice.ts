@@ -12,7 +12,9 @@ const initialState: AuthState = (() => {
   try {
     const saved = localStorage.getItem('kungfu_auth');
     if (saved) return JSON.parse(saved);
-  } catch (_) {}
+  } catch (error) {
+    void error;
+  }
   return { isAuthenticated: false, token: null, email: null, username: null };
 })();
 

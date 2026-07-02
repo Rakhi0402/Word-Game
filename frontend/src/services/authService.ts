@@ -22,7 +22,8 @@ export const authService = {
         return { success: true, data: { username: auto.username, email: auto.email, token: `mock-jwt-${auto.username}` } };
       }
       return { success: false, data: {} as AuthResponse, message: 'Invalid email or password.' };
-    } catch (_) {
+    } catch (error) {
+      void error;
       return { success: false, data: {} as AuthResponse, message: 'An error occurred during login.' };
     }
   },
@@ -39,7 +40,8 @@ export const authService = {
       users.push({ username, email, password });
       localStorage.setItem('kungfu_registered_users', JSON.stringify(users));
       return { success: true, data: { username, email, token: `mock-jwt-${username}` } };
-    } catch (_) {
+    } catch (error) {
+      void error;
       return { success: false, data: {} as AuthResponse, message: 'Registration failed.' };
     }
   },

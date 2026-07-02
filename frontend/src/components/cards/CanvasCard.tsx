@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useCallback, useRef, useEffect } from 'react';
 import type { CharacterCard } from '../../types';
 import { assetPreloader } from '../../utils/preloader';
 
@@ -17,7 +17,7 @@ export const CanvasCard: React.FC<CanvasCardProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const drawCard = () => {
+  const drawCard = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -56,15 +56,15 @@ export const CanvasCard: React.FC<CanvasCardProps> = ({
       ctx.roundRect(imageX, imageY, imageW, imageH, cornerRadius - 10);
       ctx.fill();
     }
-  };
+  }, [card, width, height]);
 
-  useEffect(() => { drawCard(); }, [card, width, height]);
+  useEffect(() => { drawCard(); }, [drawCard]);
 
   useEffect(() => {
     const obs = new MutationObserver(() => drawCard());
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => obs.disconnect();
-  }, [card]);
+  }, [drawCard]);
 
   const handleDownload = () => {
     const canvas = canvasRef.current;

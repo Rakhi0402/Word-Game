@@ -14,7 +14,9 @@ const initialState: SettingsState = (() => {
       else document.documentElement.classList.remove('dark');
       return parsed;
     }
-  } catch (_) {}
+  } catch (error) {
+    void error;
+  }
   return { darkMode: false, sound: true };
 })();
 

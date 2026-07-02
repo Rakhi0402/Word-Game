@@ -38,7 +38,9 @@ const initialState: CardsState = (() => {
         rarityFilter: parsed.rarityFilter || 'all',
       };
     }
-  } catch (_) {}
+  } catch (error) {
+    void error;
+  }
   return {
     unlockedCardIds: ['po_common'],
     equippedCardId: 'po_common',

@@ -21,7 +21,9 @@ const initialState: User = (() => {
   try {
     const saved = localStorage.getItem('kungfu_user');
     if (saved) return JSON.parse(saved);
-  } catch (_) {}
+  } catch (error) {
+    void error;
+  }
   return defaultUser;
 })();
 

@@ -49,8 +49,8 @@ class AssetPreloader {
           await img.decode().catch(() => {});
         }
         this.imageCache.set(url, img);
-      } catch (_) {
-        // silently continue
+      } catch (error) {
+        void error;
       } finally {
         loadedCount++;
         onProgress(Math.floor((loadedCount / total) * 100));

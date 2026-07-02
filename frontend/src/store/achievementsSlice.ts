@@ -12,7 +12,9 @@ const initialState: AchievementsState = (() => {
   try {
     const saved = localStorage.getItem('kungfu_achievements');
     if (saved) return JSON.parse(saved);
-  } catch (_) {}
+  } catch (error) {
+    void error;
+  }
   return { achievements: DEFAULT_ACHIEVEMENTS };
 })();
 
