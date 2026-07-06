@@ -106,7 +106,7 @@ export const DAILY_PUZZLES: DailyPuzzle[] = [
     validWords: [
       'PANDA','PANDAS','SAND','SPAN','SNAP','PAST','SPAT','TAPS',
       'PANS','PATS','NAPS','STAND','SAT','AND','TAG','TAGS',
-      'GASP','GAP','GAPS','PANG','PANGS','PAGAN','PAGANS',
+      'GASP','GAP','GAPS','PANG','PANGS','PAGAN','PAGANS', 'STANDGAP',
     ],
     difficulty: 'Easy',
     xpReward: 50,
@@ -131,7 +131,7 @@ export const DAILY_PUZZLES: DailyPuzzle[] = [
     validWords: [
       'MASTER','MASTERS','STEAM','TEAMS','SEAM','MEAT','TAME',
       'CRATE','CRATES','CREAM','CREAMS','SCREAM','SCREAMS','ACRE',
-      'ACRES','TEAR','TEARS','STARE','RATES','MATE','MATES',
+      'ACRES','TEAR','TEARS','STARE','RATES','MATE','MATES','STREAMCASTER',
     ],
     difficulty: 'Hard',
     xpReward: 200,

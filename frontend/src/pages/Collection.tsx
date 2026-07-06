@@ -154,7 +154,7 @@ export const Collection: React.FC = () => {
                   relative flex flex-col items-center p-1 rounded-2xl transition-all duration-300 select-none cursor-pointer
                   ${unlocked 
                     ? 'border-gold hover:scale-105 hover:shadow-xl' 
-                    : 'opacity-40 cursor-not-allowed'
+                    : 'opacity-20 cursor-not-allowed'
                   }
                 `}
               >
@@ -170,7 +170,7 @@ export const Collection: React.FC = () => {
 
                 {/* Lock Overlay */}
                 {!unlocked && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 rounded-2xl">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl">
                     <Lock className="h-6 w-6 text-gold" />
                     <span className="text-[9px] font-bold text-gold uppercase tracking-widest mt-1">Locked</span>
                   </div>
