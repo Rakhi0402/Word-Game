@@ -63,28 +63,7 @@ export const Puzzle: React.FC = () => {
   const puzzleInputRef = useRef<PuzzleInputHandle>(null);
 
   const toggleAside = (panel: Exclude<AsidePanel, 'none'>) => {
-    setAsidePanel((prev) => {
-      const next: AsidePanel = prev === panel ? 'none' : panel;
-      // #region agent log
-      fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': '156feb',
-        },
-        body: JSON.stringify({
-          sessionId: '156feb',
-          runId: 'ui-fix',
-          hypothesisId: 'H2',
-          location: 'Puzzle.tsx:toggleAside',
-          message: 'aside accordion exclusivity toggle',
-          data: { prev, clicked: panel, next },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      return next;
-    });
+    setAsidePanel((prev) => (prev === panel ? 'none' : panel));
   };
 
   const liveChoiceRemaining = Math.max(
@@ -134,13 +113,7 @@ export const Puzzle: React.FC = () => {
 
   useEffect(() => {
     const boot = async () => {
-      // #region agent log
-      fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'H3',location:'Puzzle.tsx:boot-entry',message:'boot start',data:{hasEmail:Boolean(email),emailLen:email?email.length:0,reduxPuzzleId:puzzle.activePuzzleId,reduxCompleted:puzzle.completed,reduxLocked:puzzle.locked},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       if (!email) {
-        // #region agent log
-        fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'H3',location:'Puzzle.tsx:no-email',message:'boot skipped — no email → choice',data:{},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         setScreen('choice');
         setInitDone(true);
         return;
@@ -149,13 +122,7 @@ export const Puzzle: React.FC = () => {
       setLoading(true);
       try {
         const dailyRes = await puzzleService.getDailyPuzzle();
-        // #region agent log
-        fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'H1',location:'Puzzle.tsx:daily-fetch',message:'getDailyPuzzle result',data:{success:dailyRes.success,puzzleId:dailyRes.data?.id??null,difficulty:dailyRes.data?.difficulty??null},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         if (!dailyRes.success || !dailyRes.data) {
-          // #region agent log
-          fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'H1',location:'Puzzle.tsx:daily-fail',message:'daily fetch failed → choice',data:{},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           setScreen('choice');
           setLoading(false);
           setInitDone(true);
@@ -163,7 +130,6 @@ export const Puzzle: React.FC = () => {
         }
 
         const todayPuzzle = dailyRes.data;
-        const snap = loadDailyCompletion(email);
         const doneToday = isTodaysDailyCompleted(email, todayPuzzle.id);
         const remaining =
           MAX_CHOICE_PUZZLES_PER_DAY -
@@ -171,20 +137,12 @@ export const Puzzle: React.FC = () => {
             ? store.getState().user.choicePuzzlesCompletedToday
             : 0);
 
-        // #region agent log
-        fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'post-fix',hypothesisId:'H2',location:'Puzzle.tsx:done-check',message:'isTodaysDailyCompleted',data:{doneToday,todayPuzzleId:todayPuzzle.id,snapPuzzleId:snap?.puzzleId??null,snapDate:snap?.date??null,todayKey:todayKey(),remaining},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-
         if (!doneToday) {
           const canResume =
             puzzle.activePuzzleId === todayPuzzle.id &&
             puzzle.isDailySession &&
             !puzzle.completed &&
             !puzzle.locked;
-
-          // #region agent log
-          fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'post-fix',hypothesisId:'H5',location:'Puzzle.tsx:load-path',message:'loading playable daily',data:{canResume,branch:canResume?'resume':'fresh-load'},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
 
           if (canResume) {
             setScreen('play');
@@ -198,15 +156,9 @@ export const Puzzle: React.FC = () => {
             setScreen('play');
           }
         } else {
-          // #region agent log
-          fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'H2',location:'Puzzle.tsx:skip-daily',message:'daily skipped as done → extras',data:{nextScreen:remaining>0?'choice':'quota_done'},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           setScreen(remaining > 0 ? 'choice' : 'quota_done');
         }
-      } catch (err) {
-        // #region agent log
-        fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'H4',location:'Puzzle.tsx:boot-error',message:'boot threw',data:{error:String(err)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
+      } catch {
         setScreen('choice');
       }
 
@@ -299,9 +251,6 @@ export const Puzzle: React.FC = () => {
     onBackspace: () => dispatch(deleteLetter()),
     onClear: () => dispatch(clearWord()),
     onSubmit: () => {
-      // #region agent log
-      fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'post-fix',hypothesisId:'H1',location:'Puzzle.tsx:keyboard-submit',message:'keyboard Enter → PuzzleInput.submit (unified feedback)',data:{word:puzzle.currentWord,hasRef:Boolean(puzzleInputRef.current)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       void puzzleInputRef.current?.submit();
     },
     onShuffle: () => dispatch(shuffleLetters()),

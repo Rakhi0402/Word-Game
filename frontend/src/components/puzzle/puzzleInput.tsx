@@ -79,87 +79,12 @@ export const PuzzleInput = forwardRef<PuzzleInputHandle, PuzzleInputProps>(
       const el = wordScrollRef.current;
       if (el) {
         el.scrollLeft = el.scrollWidth;
-        // #region agent log
-        fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Debug-Session-Id': '156feb',
-          },
-          body: JSON.stringify({
-            sessionId: '156feb',
-            runId: 'ui-fix',
-            hypothesisId: 'H1',
-            location: 'puzzleInput.tsx:wordScroll',
-            message: 'current word length + scroll metrics',
-            data: {
-              len: puzzle.currentWord.length,
-              max: MAX_WORD_INPUT_LENGTH,
-              atMax: puzzle.currentWord.length >= MAX_WORD_INPUT_LENGTH,
-              clientWidth: el.clientWidth,
-              scrollWidth: el.scrollWidth,
-              overflowX: el.scrollWidth > el.clientWidth,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
       }
     }, [puzzle.currentWord]);
     const atMaxLength = puzzle.currentWord.length >= MAX_WORD_INPUT_LENGTH;
 
-    // #region agent log
-    if (atMaxLength || disabled) {
-      fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': '156feb',
-        },
-        body: JSON.stringify({
-          sessionId: '156feb',
-          runId: 'post-fix',
-          hypothesisId: 'H1',
-          location: 'puzzleInput.tsx:wheelProps',
-          message: 'wheel props after fix (no conflation)',
-          data: {
-            wordLen: puzzle.currentWord.length,
-            max: MAX_WORD_INPUT_LENGTH,
-            atMaxLength,
-            puzzleDisabledProp: disabled,
-            completed: puzzle.completed,
-            locked: puzzle.locked,
-            wheelDisabledOnlyWhenCompleted: disabled,
-            maxLengthProp: atMaxLength && !disabled,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
-
     const handleLetterClick = (letter: string) => {
-      if (disabled || atMaxLength) {
-        // #region agent log
-        fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Debug-Session-Id': '156feb',
-          },
-          body: JSON.stringify({
-            sessionId: '156feb',
-            runId: 'post-fix',
-            hypothesisId: 'H1',
-            location: 'puzzleInput.tsx:handleLetterClick-blocked',
-            message: 'letter click blocked',
-            data: { letter, disabled, atMaxLength, completed: puzzle.completed },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
-        return;
-      }
+      if (disabled || atMaxLength) return;
       showFeedback(null);
       dispatch(selectLetter(letter));
     };
@@ -167,45 +92,7 @@ export const PuzzleInput = forwardRef<PuzzleInputHandle, PuzzleInputProps>(
     const handleSubmit = async () => {
       if (disabled || !puzzle.currentWord.trim()) return;
 
-      // #region agent log
-      fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': '156feb',
-        },
-        body: JSON.stringify({
-          sessionId: '156feb',
-          runId: 'post-fix',
-          hypothesisId: 'H1',
-          location: 'puzzleInput.tsx:handleSubmit',
-          message: 'unified submit path (click or keyboard)',
-          data: { wordLen: puzzle.currentWord.length, word: puzzle.currentWord },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-
       const result = await onSubmit();
-
-      // #region agent log
-      fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': '156feb',
-        },
-        body: JSON.stringify({
-          sessionId: '156feb',
-          runId: 'post-fix',
-          hypothesisId: 'H1',
-          location: 'puzzleInput.tsx:handleSubmit-result',
-          message: 'unified submit result → feedback',
-          data: { result },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
 
       if (result === false) {
         showFeedback({ tone: 'error', message: 'Could not submit' });

@@ -19,24 +19,6 @@ const usePuzzleSubmission = () => {
   const submittingRef = useRef(false);
 
   const handleSubmit = useCallback(async (): Promise<string | false> => {
-    // #region agent log
-    fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Debug-Session-Id': '156feb',
-      },
-      body: JSON.stringify({
-        sessionId: '156feb',
-        runId: 'rewards-post',
-        hypothesisId: 'R1',
-        location: 'usePuzzleSubmission.ts:entry',
-        message: 'submit — no mid-play XP/coin drip to user',
-        data: { word: puzzle.currentWord, sessionScoreBefore: puzzle.score },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     if (!puzzle.activePuzzleId || !puzzle.currentWord.trim() || puzzle.completed) {
       return false;
     }

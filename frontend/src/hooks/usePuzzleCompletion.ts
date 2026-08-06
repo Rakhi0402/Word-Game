@@ -122,9 +122,6 @@ export const usePuzzleCompletion = (): CompletionResult => {
     setRewards(calculated);
 
     const prevXp = user.xp;
-    // #region agent log
-    fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'rewards-post',hypothesisId:'R2',location:'usePuzzleCompletion.ts:settle',message:'completion-only user XP/coins grant',data:{prevXp,prevCoins:user.coins,grantXp:calculated.xp,grantCoins:calculated.coins,sessionScore:puzzle.score,wordsThisPuzzle:puzzle.wordsFound.length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     dispatch(addXp(calculated.xp));
     dispatch(addCoins(calculated.coins));
     dispatch(addWordsFound(puzzle.wordsFound.length));

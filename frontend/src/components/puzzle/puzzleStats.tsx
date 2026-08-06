@@ -22,9 +22,6 @@ export const PuzzleStats: React.FC<PuzzleStatsProps> = ({
 }) => {
   const puzzle = useAppSelector((state) => state.puzzle);
   const hints = usePuzzleHints();
-  
-
-
 
   return (
     <div className="rounded-2xl border border-gold bg-jade text-gold dark:bg-black/10">
@@ -43,35 +40,7 @@ export const PuzzleStats: React.FC<PuzzleStatsProps> = ({
       {expanded && (
         <div
           className={`${PANEL_MAX_H} space-y-5 overflow-y-auto border-t border-gold/10 p-5 [scrollbar-width:thin scrollbar-color:gold/30]`}
-          ref={(el) => {
-            if (!el) return;
-            // #region agent log
-            fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-Debug-Session-Id': '156feb',
-              },
-              body: JSON.stringify({
-                sessionId: '156feb',
-                runId: 'ui-fix',
-                hypothesisId: 'H3',
-                location: 'puzzleStats.tsx:panel',
-                message: 'stats panel scroll metrics',
-                data: {
-                  clientHeight: el.clientHeight,
-                  scrollHeight: el.scrollHeight,
-                  overflowY: el.scrollHeight > el.clientHeight,
-                  maxClass: PANEL_MAX_H,
-                },
-                timestamp: Date.now(),
-              }),
-            }).catch(() => {});
-            // #endregion
-          }}
         >
-         
-
           <HintPanel
             remainingHints={hints.remainingHints}
             hintCost={HINT_COST_COINS}
@@ -84,7 +53,7 @@ export const PuzzleStats: React.FC<PuzzleStatsProps> = ({
           {puzzle.hintedWords.length > 0 && (
             <div className="rounded-xl border border-gold/20 p-5">
               <div className="text-sm uppercase opacity-70">Revealed Word</div>
-              <p className="mt-3 text-xl font-bold uppercase tracking-[0.1em] text-jade-dark">
+              <p className="mt-3 text-xl font-bold uppercase tracking-[0.1em] text-parchment">
                 {puzzle.hintedWords[puzzle.hintedWords.length - 1]}
               </p>
             </div>

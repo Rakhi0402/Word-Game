@@ -1,8 +1,5 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAppDispatch } from '../store';
-import { loginSuccess } from '../store/authSlice';
-import { hydrateSession } from '../store/session';
 import { authService } from '../services/authService';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -16,7 +13,6 @@ export const Register: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -33,18 +29,10 @@ export const Register: React.FC = () => {
     const res = await authService.register(username, email, password);
 
     if (res.success && res.data) {
-      dispatch(
-        loginSuccess({
-          email: res.data.email,
-          username: res.data.username,
-          token: res.data.token,
-        })
-      );
-      await hydrateSession(dispatch, {
-        email: res.data.email,
-        username: res.data.username,
+      navigate('/login', {
+        replace: true,
+        state: { registered: true, email: res.data.email },
       });
-      navigate('/login');
     } else {
       setError(res.message || 'Registration failed. Try again.');
       setLoading(false);

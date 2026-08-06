@@ -25,25 +25,6 @@ export const LetterWheel: React.FC<LetterWheelProps> = ({
       ? "maxLength"
       : "none";
 
-  // #region agent log
-  fetch("http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "156feb",
-    },
-    body: JSON.stringify({
-      sessionId: "156feb",
-      runId: "post-fix",
-      hypothesisId: "H1",
-      location: "LetterWheel.tsx:render",
-      message: "LetterWheel overlay kind",
-      data: { disabled, maxLengthReached, lettersBlocked, overlayKind },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   return (
     <div className="flex justify-center items-center">
       <div

@@ -112,29 +112,7 @@ const puzzleSlice = createSlice({
     },
     selectLetter: (state, action: PayloadAction<string>) => {
       if (state.completed || state.locked) return;
-      if (state.currentWord.length >= MAX_WORD_INPUT_LENGTH) {
-        // #region agent log
-        if (typeof fetch !== 'undefined') {
-          fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Debug-Session-Id': '156feb',
-            },
-            body: JSON.stringify({
-              sessionId: '156feb',
-              runId: 'ui-fix',
-              hypothesisId: 'H1',
-              location: 'puzzleSlice.ts:selectLetter',
-              message: 'blocked letter — at max input length',
-              data: { len: state.currentWord.length, max: MAX_WORD_INPUT_LENGTH, letter: action.payload },
-              timestamp: Date.now(),
-            }),
-          }).catch(() => {});
-        }
-        // #endregion
-        return;
-      }
+      if (state.currentWord.length >= MAX_WORD_INPUT_LENGTH) return;
       state.currentWord += action.payload;
       state.lastRejectedWord = null;
       state.lastRejectedReason = null;

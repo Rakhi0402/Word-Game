@@ -41,34 +41,8 @@ export const GameRules: React.FC<{
       </button>
 
       {expanded && (
-        <div
-          className="max-h-72 animate-in fade-in space-y-6 overflow-y-auto border-t border-gold/50 p-6 duration-300 [scrollbar-width:thin scrollbar-color:gold/30]"
-          ref={(el) => {
-            if (!el) return;
-            // #region agent log
-            fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-Debug-Session-Id': '156feb',
-              },
-              body: JSON.stringify({
-                sessionId: '156feb',
-                runId: 'ui-fix',
-                hypothesisId: 'H3',
-                location: 'GameRules.tsx:panel',
-                message: 'rules panel scroll metrics',
-                data: {
-                  clientHeight: el.clientHeight,
-                  scrollHeight: el.scrollHeight,
-                  overflowY: el.scrollHeight > el.clientHeight,
-                },
-                timestamp: Date.now(),
-              }),
-            }).catch(() => {});
-            // #endregion
-          }}
-        >          <section>
+        <div className="max-h-72 animate-in fade-in space-y-6 overflow-y-auto border-t border-gold/50 p-6 duration-300 [scrollbar-width:thin scrollbar-color:gold/30]">
+          <section>
             <div className="mb-2 flex items-center gap-2">
               <Target className="text-green-500" size={18} />
               <h3 className="font-semibold">Choose difficulty</h3>
