@@ -24,7 +24,7 @@ export const PuzzleHeader: React.FC = () => {
       {/* Difficulty + Daily Goal */}
       <div className="flex flex-wrap justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-black text-gold-glow dark:text-gold Uppercase font-martial tracking-wider">
+          <h1 className="text-3xl font-bold text-black text-gold-glow dark:text-gold uppercase font-martial tracking-wider">
             Daily Puzzle
           </h1>
           <p className="text-sm text-jade-400">

@@ -5,6 +5,7 @@ class AssetPreloader {
   private assetsToPreload = [
     '/assets/background/login_bg.png',
     '/assets/background/home_bg.png',
+    '/assets/background/puzzle_bg.jpg',
     '/assets/background/card_coll_bg.jpeg',
     '/assets/background/leaderboard_bg.jpeg',
     '/assets/background/achievements.jpeg',
@@ -34,8 +35,12 @@ class AssetPreloader {
 
   public async preloadAll(onProgress: (percent: number) => void): Promise<void> {
     const total = this.assetsToPreload.length;
-    if (total === 0) { onProgress(100); return; }
+    if (total === 0) {
+      onProgress(100);
+      return;
+    }
     let loadedCount = 0;
+    let failedCount = 0;
 
     const loadPromises = this.assetsToPreload.map(async (url) => {
       try {
@@ -43,14 +48,20 @@ class AssetPreloader {
         img.src = url;
         await new Promise<void>((resolve) => {
           img.onload = () => resolve();
-          img.onerror = () => resolve(); // don't block on missing assets
+          img.onerror = () => {
+            failedCount += 1;
+            resolve();
+          };
         });
         if ('decode' in img) {
           await img.decode().catch(() => {});
         }
-        this.imageCache.set(url, img);
+        if (img.complete && img.naturalWidth > 0) {
+          this.imageCache.set(url, img);
+        }
       } catch (error) {
         void error;
+        failedCount += 1;
       } finally {
         loadedCount++;
         onProgress(Math.floor((loadedCount / total) * 100));
@@ -58,6 +69,9 @@ class AssetPreloader {
     });
 
     await Promise.all(loadPromises);
+    if (failedCount > 0) {
+      console.warn(`[AssetPreloader] ${failedCount}/${total} assets failed to load`);
+    }
   }
 }
 

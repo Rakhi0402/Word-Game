@@ -1,7 +1,19 @@
 import React, { useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store';
-import { unlockCard, equipCard, setRarityFilter } from '../store/cardsSlice';
-import { addCoins, deductCoins, incrementCardsCount } from '../store/userSlice';
+import {
+  unlockCard,
+  equipCard,
+  setRarityFilter,
+  getCharacterMultiplier,
+} from '../store/cardsSlice';
+import {
+  addCoins,
+  deductCoins,
+  incrementCardsCount,
+  setCharacterMultiplier,
+  addStreakShields,
+  consumeFreeChestToken,
+} from '../store/userSlice';
 import { evaluateAchievements } from '../store/achievementsSlice';
 import { Button } from '../components/ui/Button';
 import { Tabs } from '../components/ui/Tabs';
@@ -9,139 +21,183 @@ import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
 import { CanvasCard } from '../components/cards/CanvasCard';
 import { CHARACTER_CARDS } from '../constants';
+import { CHEST_DRAW_COST, getStarTier } from '../constants/rewards';
 import type { CharacterCard, RarityType } from '../types';
 import { cardService } from '../services/cardService';
 import { playSound } from '../utils/audio';
 import { Lock, Sparkles, Share2, Coins, HelpCircle } from 'lucide-react';
+import { store } from '../store';
+import { saveProgressFromState } from '../utils/mockProgress';
+
+type DrawResult = {
+  card: CharacterCard;
+  isDuplicate: boolean;
+  isExhaustedRestore: boolean;
+  refundAmount: number;
+  usedFreeToken: boolean;
+};
 
 export const Collection: React.FC = () => {
   const dispatch = useAppDispatch();
+  const user = useAppSelector((state) => state.user);
+  const cards = useAppSelector((state) => state.cards);
+  const soundEnabled = useAppSelector((state) => state.settings.sound);
 
-  // State selectors
-  const user = useAppSelector(state => state.user);
-  const cards = useAppSelector(state => state.cards);
-  const soundEnabled = useAppSelector(state => state.settings.sound);
-
-  // Local component states
   const [selectedCard, setSelectedCard] = useState<CharacterCard | null>(null);
   const [shareCard, setShareCard] = useState<CharacterCard | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [drawResult, setDrawResult] = useState<{ card: CharacterCard; isDuplicate: boolean; refundAmount: number } | null>(null);
+  const [drawResult, setDrawResult] = useState<DrawResult | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // Filter options
   const filterOptions = [
     { id: 'all', label: 'All Scrolls' },
     { id: 'common', label: 'Common' },
     { id: 'rare', label: 'Rare' },
     { id: 'epic', label: 'Epic' },
-    { id: 'legendary', label: 'Legendary' }
+    { id: 'legendary', label: 'Legendary' },
   ];
 
-  // Filter cards list
-  const filteredCards = CHARACTER_CARDS.filter(card => {
+  const filteredCards = CHARACTER_CARDS.filter((card) => {
     if (cards.rarityFilter === 'all') return true;
     return card.rarity === cards.rarityFilter;
   });
 
-  // Chest gacha draw
+  const exhaustedIds = cards.unlockedCardIds.filter(
+    (id) => cards.inventory[id]?.status === 'exhausted'
+  );
+
+  const persist = () => {
+    const email = store.getState().auth.email || user.email;
+    if (email) queueMicrotask(() => saveProgressFromState(email, store.getState()));
+  };
+
   const handleDrawCard = async () => {
-    if (user.coins < 50) {
+    const useToken = user.freeChestTokens > 0;
+    if (!useToken && user.coins < CHEST_DRAW_COST) {
       playSound.failure(soundEnabled);
-      alert("You need 50 coins to draw from the Sacred Scroll Chest!");
+      alert(`You need ${CHEST_DRAW_COST} coins to draw from the Sacred Scroll Chest!`);
       return;
     }
 
     setIsDrawing(true);
     playSound.success(soundEnabled);
 
-    // Call service to pull random card
-    const res = await cardService.drawRandomCard(cards.unlockedCardIds);
+    const res = await cardService.drawRandomCard(cards.unlockedCardIds, exhaustedIds);
 
     if (res.success && res.data) {
       const pulled = res.data.card;
-      
-      // Deduct coins
-      dispatch(deductCoins(50));
-
-      if (res.data.isDuplicate) {
-        // Refund coins
-        dispatch(addCoins(res.data.refundAmount));
+      if (useToken) {
+        dispatch(consumeFreeChestToken(undefined));
       } else {
-        // Unlock card
-        dispatch(unlockCard(pulled.id));
-        dispatch(incrementCardsCount());
-        
-        // Trigger achievements check
-        dispatch(evaluateAchievements({
-          stats: {
-            ...user.stats,
-            cardsCollected: user.stats.cardsCollected + 1
-          },
-          xp: user.xp
-        }));
+        dispatch(deductCoins(CHEST_DRAW_COST));
       }
 
-      setDrawResult(res.data);
+      if (res.data.isExhaustedRestore) {
+        dispatch(unlockCard({ cardId: pulled.id, restoreCharges: true }));
+      } else if (res.data.isDuplicate) {
+        dispatch(addCoins(res.data.refundAmount));
+      } else {
+        dispatch(unlockCard({ cardId: pulled.id }));
+        dispatch(incrementCardsCount(undefined));
+        dispatch(
+          evaluateAchievements({
+            stats: {
+              ...user.stats,
+              cardsCollected: user.stats.cardsCollected + 1,
+            },
+            xp: user.xp,
+          })
+        );
+      }
+
+      setDrawResult({ ...res.data, usedFreeToken: useToken });
+      persist();
     }
     setIsDrawing(false);
   };
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     if (!shareCard) return;
-    const shareUrl = `${window.location.origin}/share/${shareCard.id}`;
-    navigator.clipboard.writeText(shareUrl);
-    setCopiedLink(true);
-    playSound.click(soundEnabled);
-    setTimeout(() => setCopiedLink(false), 2000);
+    const shareText = `Check out my ${shareCard.name} scroll in Kung Fu Word Quest! (${shareCard.rarity})`;
+    try {
+      await navigator.clipboard.writeText(shareText);
+      setCopiedLink(true);
+      playSound.click(soundEnabled);
+      setTimeout(() => setCopiedLink(false), 2000);
+    } catch {
+      alert(shareText);
+    }
+  };
+
+  const handleEquip = (cardId: string) => {
+    const entry = cards.inventory[cardId];
+    if (!entry || entry.status !== 'available') {
+      playSound.failure(soundEnabled);
+      return;
+    }
+    const card = CHARACTER_CARDS.find((c) => c.id === cardId);
+    const shields = card ? getStarTier(card.stars).streakShieldsOnEquip : 0;
+    dispatch(equipCard(cardId));
+    dispatch(setCharacterMultiplier(getCharacterMultiplier(cardId)));
+    if (shields > 0) dispatch(addStreakShields(shields));
+    persist();
   };
 
   const isUnlocked = (cardId: string) => cards.unlockedCardIds.includes(cardId);
   const isEquipped = (cardId: string) => cards.equippedCardId === cardId;
+  const isExhausted = (cardId: string) => cards.inventory[cardId]?.status === 'exhausted';
+  const chargesOf = (cardId: string) => cards.inventory[cardId]?.chargesRemaining ?? 0;
+
+  const canAffordChest = user.freeChestTokens > 0 || user.coins >= CHEST_DRAW_COST;
 
   return (
     <div className="space-y-6">
-      
-      {/* Title Header */}
-      <div className="flex flex-col justify-between items-center gap-4 sm:flex-row border-b border-gold/15 pb-4">
+      <div className="flex flex-col items-center justify-between gap-4 border-b border-gold/15 pb-4 sm:flex-row">
         <div>
-          <h2 className="text-3xl font-extrabold text-black text-gold-glow dark:text-[#f7d36b] uppercase font-martial tracking-wider">
+          <h2 className="font-martial text-3xl font-extrabold uppercase tracking-wider text-black text-gold-glow dark:text-[#f7d36b]">
             Scroll Collection
           </h2>
-          <p className="text-sm text-jade-dark/90 dark:text-parchment/70 font-medium">
-            Unlock legendary Furious Five character scrolls to boost your word decoding stats.
+          <p className="text-sm font-medium text-jade-dark/90 dark:text-parchment/70">
+            Same star count = same bonuses. Charges deplete on puzzle clear; exhausted scrolls need a
+            chest restore or streak refill.
           </p>
+          {(user.streakShields > 0 || user.freeChestTokens > 0) && (
+            <p className="mt-1 text-xs text-gold">
+              Day Streak Shields: {user.streakShields} · Free chest tokens: {user.freeChestTokens}
+            </p>
+          )}
         </div>
 
-        {/* Chest Summoning Button */}
-        <Button 
-          variant="primary" 
-          onClick={handleDrawCard} 
-          disabled={isDrawing || user.coins < 50}
-          className="flex items-center space-x-2 shrink-0 animate-lantern border-b-4 border-gold-dark"
+        <Button
+          variant="primary"
+          onClick={() => void handleDrawCard()}
+          disabled={isDrawing || !canAffordChest}
+          className="flex shrink-0 animate-lantern items-center space-x-2 border-b-4 border-gold-dark"
         >
           <Sparkles className="h-4 w-4" />
-          <span>Summon Scroll (50)</span>
+          <span>
+            {user.freeChestTokens > 0
+              ? `Free Summon (${user.freeChestTokens})`
+              : `Summon Scroll (${CHEST_DRAW_COST})`}
+          </span>
         </Button>
       </div>
 
-      {/* Tabs Filter */}
-      <Tabs 
-        options={filterOptions} 
-        activeTab={cards.rarityFilter} 
-        onChange={(id) => dispatch(setRarityFilter(id as RarityType | 'all'))} 
+      <Tabs
+        options={filterOptions}
+        activeTab={cards.rarityFilter}
+        onChange={(id) => dispatch(setRarityFilter(id as RarityType | 'all'))}
       />
 
-      {/* Cards Grid */}
-      <div className="grid gap-20 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-20 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {filteredCards.map((card) => {
           const unlocked = isUnlocked(card.id);
           const equipped = isEquipped(card.id);
+          const exhausted = isExhausted(card.id);
 
           return (
             <div key={card.id} className="relative">
-              {/* Card Container */}
-              <div 
+              <div
                 onClick={() => {
                   if (unlocked) {
                     setSelectedCard(card);
@@ -150,29 +206,37 @@ export const Collection: React.FC = () => {
                     playSound.failure(soundEnabled);
                   }
                 }}
-                className={`
-                  relative flex flex-col items-center p-1 rounded-2xl transition-all duration-300 select-none cursor-pointer
-                  ${unlocked 
-                    ? 'border-gold hover:scale-105 hover:shadow-xl' 
-                    : 'opacity-20 cursor-not-allowed'
-                  }
-                `}
+                className={`relative flex cursor-pointer select-none flex-col items-center rounded-2xl p-1 transition-all duration-300 ${
+                  unlocked
+                    ? exhausted
+                      ? 'border-red-500/40 opacity-60 hover:scale-105'
+                      : 'border-gold hover:scale-105 hover:shadow-xl'
+                    : 'cursor-not-allowed opacity-20'
+                }`}
               >
-                {/* Visual Card Artwork Canvas Preview */}
                 <CanvasCard card={card} width={210} height={294} interactive={false} />
 
-                {/* Badge Overlay */}
                 {equipped && (
-                  <span className="absolute top-2 left-2 bg-emerald-600 text-white text-[8px] font-black uppercase px-2 py-0.5 rounded-full shadow border border-emerald-400">
+                  <span className="absolute left-2 top-2 rounded-full border border-emerald-400 bg-emerald-600 px-2 py-0.5 text-[8px] font-black uppercase text-white shadow">
                     Active
                   </span>
                 )}
-
-                {/* Lock Overlay */}
+                {unlocked && exhausted && (
+                  <span className="absolute right-2 top-2 rounded-full border border-red-400 bg-red-900/90 px-2 py-0.5 text-[8px] font-black uppercase text-white shadow">
+                    Spent
+                  </span>
+                )}
+                {unlocked && !exhausted && (
+                  <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded bg-black/70 px-2 py-0.5 text-[9px] font-bold text-gold">
+                    {chargesOf(card.id)} charges
+                  </span>
+                )}
                 {!unlocked && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl">
                     <Lock className="h-6 w-6 text-gold" />
-                    <span className="text-[9px] font-bold text-gold uppercase tracking-widest mt-1">Locked</span>
+                    <span className="mt-1 text-[9px] font-bold uppercase tracking-widest text-gold">
+                      Locked
+                    </span>
                   </div>
                 )}
               </div>
@@ -181,71 +245,80 @@ export const Collection: React.FC = () => {
         })}
       </div>
 
-      {/* Empty State */}
       {filteredCards.length === 0 && (
-        <div className="text-center py-16 text-jade-dark/50 dark:text-parchment/40">
-          <HelpCircle className="h-12 w-12 mx-auto mb-2 text-gold" />
-          <p className="font-bold uppercase tracking-wider text-sm">No scrolls found in this category</p>
-          <p className="text-xs mt-1">Summon cards using your gold coins or complete daily puzzles!</p>
+        <div className="py-16 text-center text-jade-dark/50 dark:text-parchment/40">
+          <HelpCircle className="mx-auto mb-2 h-12 w-12 text-gold" />
+          <p className="text-sm font-bold uppercase tracking-wider">No scrolls found in this category</p>
         </div>
       )}
 
-      {/* Card Detail Modal */}
       {selectedCard && (
         <Modal
           isOpen={!!selectedCard}
           onClose={() => setSelectedCard(null)}
-          title="Scroll Detail 📜"
+          title="Scroll Detail"
           variant="wood"
         >
           <div className="flex flex-col items-center space-y-4 py-2">
-            {/* Canvas-rendered card inside Modal */}
             <CanvasCard card={selectedCard} width={360} height={448} interactive={false} />
-
-            <div className="w-full text-center space-y-2">
-              <h3 className="text-xl font-black text-gold text-gold-glow uppercase tracking-wider font-martial">
+            <div className="w-full space-y-2 text-center">
+              <h3 className="font-martial text-xl font-black uppercase tracking-wider text-gold text-gold-glow">
                 {selectedCard.name}
               </h3>
-              <Badge rarity={selectedCard.rarity}>{selectedCard.rarity}</Badge>
-              
-              <p className="text-xs text-parchment/70 italic px-4 leading-relaxed mt-2">
-                "{selectedCard.description}"
+              <Badge rarity={selectedCard.rarity}>
+                {selectedCard.rarity} · {selectedCard.stars}★
+              </Badge>
+              <p className="mt-2 px-4 text-xs italic leading-relaxed text-parchment/70">
+                &ldquo;{selectedCard.description}&rdquo;
               </p>
 
-              {/* Stats Box */}
-              <div className="bg-jade-dark/50 border border-gold/20 rounded-xl p-3 text-left max-w-sm mx-auto mt-4 space-y-1.5">
-                <span className="block text-[10px] font-bold text-gold uppercase tracking-wider border-b border-gold/10 pb-1 mb-1">
-                  Passive Blessings (Bonuses)
+              <div className="mx-auto mt-4 max-w-sm space-y-1.5 rounded-xl border border-gold/20 bg-jade-dark/50 p-3 text-left">
+                <span className="mb-1 block border-b border-gold/10 pb-1 text-[10px] font-bold uppercase tracking-wider text-gold">
+                  Star-tier blessings ({selectedCard.stars}★)
                 </span>
                 {selectedCard.bonuses.map((bonus, idx) => (
-                  <p key={idx} className="text-xs text-parchment/90 font-medium">
-                    ⚡ {bonus}
+                  <p key={idx} className="text-xs font-medium text-parchment/90">
+                    {bonus}
                   </p>
                 ))}
+                {isUnlocked(selectedCard.id) && (
+                  <p className="pt-2 text-xs text-gold">
+                    Status:{' '}
+                    {isExhausted(selectedCard.id)
+                      ? 'Spent Scroll (unavailable)'
+                      : `${chargesOf(selectedCard.id)} charges remaining`}
+                  </p>
+                )}
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center justify-center space-x-3 mt-6 border-t border-gold/20 pt-4">
+              <div className="mt-6 flex items-center justify-center space-x-3 border-t border-gold/20 pt-4">
                 <Button
                   variant="primary"
                   onClick={() => {
-                    dispatch(equipCard(selectedCard.id));
+                    handleEquip(selectedCard.id);
                     playSound.success(soundEnabled);
                     setSelectedCard(null);
                   }}
-                  disabled={isEquipped(selectedCard.id)}
+                  disabled={
+                    isEquipped(selectedCard.id) ||
+                    isExhausted(selectedCard.id) ||
+                    !isUnlocked(selectedCard.id)
+                  }
                   className="px-6"
                 >
-                  {isEquipped(selectedCard.id) ? 'Equipped' : 'Equip Scroll'}
+                  {isExhausted(selectedCard.id)
+                    ? 'Exhausted'
+                    : isEquipped(selectedCard.id)
+                      ? 'Equipped'
+                      : 'Equip Scroll'}
                 </Button>
-
                 <Button
                   variant="outline"
                   onClick={() => {
                     setShareCard(selectedCard);
                     setSelectedCard(null);
                   }}
-                  className="px-4 flex items-center space-x-1"
+                  className="flex items-center space-x-1 px-4"
                 >
                   <Share2 className="h-4 w-4" /> <span>Share</span>
                 </Button>
@@ -255,33 +328,23 @@ export const Collection: React.FC = () => {
         </Modal>
       )}
 
-      {/* Share Modal */}
       {shareCard && (
-        <Modal
-          isOpen={!!shareCard}
-          onClose={() => setShareCard(null)}
-          title="Share Scroll ☯️"
-          variant="wood"
-        >
+        <Modal isOpen={!!shareCard} onClose={() => setShareCard(null)} title="Share Scroll" variant="wood">
           <div className="flex flex-col items-center space-y-4 py-2">
-            <h4 className="text-xs font-bold text-gold uppercase tracking-widest">Disciple {user.username} showcases:</h4>
-            
-            {/* Card Render */}
-            <CanvasCard card={shareCard} width={300} height={420} interactive={false} />
-
-            <p className="text-xs text-parchment/60 text-center max-w-xs leading-relaxed">
-              Show off this unlocked Furious Five scroll character and its stats to your guild members!
-            </p>
-
-            {/* Actions */}
-            <div className="flex flex-col w-full max-w-xs space-y-2 mt-4 border-t border-gold/20 pt-4">
+            <h4 className="text-xs font-bold uppercase tracking-widest text-gold">
+              Disciple {user.username} showcases:
+            </h4>
+            <div id="share-card-canvas" className="flex justify-center">
+              <CanvasCard card={shareCard} width={300} height={420} interactive={false} />
+            </div>
+            <div className="mt-4 flex w-full max-w-xs flex-col space-y-2 border-t border-gold/20 pt-4">
               <Button
                 variant="primary"
                 onClick={() => {
                   const link = document.createElement('a');
                   link.download = `${shareCard.id}_showcase.png`;
-                  const canvasEl = document.querySelector('canvas');
-                  if (canvasEl) {
+                  const canvasEl = document.querySelector('#share-card-canvas canvas');
+                  if (canvasEl instanceof HTMLCanvasElement) {
                     link.href = canvasEl.toDataURL('image/png');
                     link.click();
                     playSound.success(soundEnabled);
@@ -291,20 +354,10 @@ export const Collection: React.FC = () => {
               >
                 Download Image
               </Button>
-
-              <Button
-                variant="outline"
-                onClick={handleCopyLink}
-                fullWidth
-              >
+              <Button variant="outline" onClick={() => void handleCopyLink()} fullWidth>
                 {copiedLink ? 'Copied Scroll Link!' : 'Copy Showcase Link'}
               </Button>
-
-              <Button
-                variant="ghost"
-                onClick={() => setShareCard(null)}
-                fullWidth
-              >
+              <Button variant="ghost" onClick={() => setShareCard(null)} fullWidth>
                 Close
               </Button>
             </div>
@@ -312,68 +365,62 @@ export const Collection: React.FC = () => {
         </Modal>
       )}
 
-      {/* Chest Drawing Animation Modal */}
       {isDrawing && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md">
-          <div className="text-center space-y-6 animate-pulse">
-            <span className="text-7xl block animate-bounce">📦</span>
-            <h2 className="text-2xl font-black text-gold text-gold-glow uppercase tracking-widest font-martial">
+          <div className="animate-pulse space-y-6 text-center">
+            <span className="block animate-bounce text-7xl">📦</span>
+            <h2 className="font-martial text-2xl font-black uppercase tracking-widest text-gold text-gold-glow">
               Summoning Scroll...
             </h2>
-            <p className="text-xs text-parchment/60 max-w-xs leading-relaxed mx-auto">
-              Channels of jade chi are opening. Unrolling the scroll bounds...
-            </p>
           </div>
         </div>
       )}
 
-      {/* Gacha Draw Result Modal */}
       {drawResult && (
         <Modal
           isOpen={!!drawResult}
           onClose={() => setDrawResult(null)}
-          title="Summoning Result! ☯️"
+          title="Summoning Result"
           variant="wood"
         >
-          <div className="text-center space-y-5 py-4">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gold border-4 border-parchment text-3xl shadow-xl animate-float">
-              ✨
-            </div>
-
-            <h3 className="text-xl font-extrabold text-gold text-gold-glow uppercase tracking-widest font-martial">
-              {drawResult.isDuplicate ? 'Duplicate Scroll!' : 'New Scroll Summoned!'}
+          <div className="space-y-5 py-4 text-center">
+            <h3 className="font-martial text-xl font-extrabold uppercase tracking-widest text-gold text-gold-glow">
+              {drawResult.isExhaustedRestore
+                ? 'Scroll Restored!'
+                : drawResult.isDuplicate
+                  ? 'Duplicate Scroll!'
+                  : 'New Scroll Summoned!'}
             </h3>
-
-            {/* Display Summoned Card */}
             <div className="flex justify-center">
               <CanvasCard card={drawResult.card} width={300} height={420} interactive={false} />
             </div>
-
-            {drawResult.isDuplicate ? (
-              <div className="space-y-1">
-                <p className="text-sm text-parchment/80 leading-relaxed">
-                  You already have <span className="font-bold text-gold">{drawResult.card.name}</span> in your collection.
-                </p>
-                <div className="flex items-center justify-center space-x-1.5 text-gold font-bold text-base mt-2">
-                  <Coins className="h-5 w-5 animate-pulse" />
-                  <span>Refunded +{drawResult.refundAmount} Coins!</span>
-                </div>
+            {drawResult.isExhaustedRestore ? (
+              <p className="text-sm leading-relaxed text-parchment/80">
+                <span className="font-bold text-gold">{drawResult.card.name}</span> charges fully
+                restored.
+              </p>
+            ) : drawResult.isDuplicate ? (
+              <div className="mt-2 flex items-center justify-center space-x-1.5 text-base font-bold text-gold">
+                <Coins className="h-5 w-5 animate-pulse" />
+                <span>Refunded +{drawResult.refundAmount} Coins!</span>
               </div>
             ) : (
-              <p className="text-sm text-parchment/80 leading-relaxed">
-                Congratulations! You successfully unlocked <span className="font-bold text-gold">{drawResult.card.name}</span>. Go to your collection grid to equip it!
+              <p className="text-sm leading-relaxed text-parchment/80">
+                Unlocked <span className="font-bold text-gold">{drawResult.card.name}</span> with full
+                charges.
               </p>
             )}
-
-            <div className="pt-4 border-t border-gold/20 flex justify-center">
+            {drawResult.usedFreeToken && (
+              <p className="text-xs text-parchment/60">Used a free chest token.</p>
+            )}
+            <div className="flex justify-center border-t border-gold/20 pt-4">
               <Button variant="primary" onClick={() => setDrawResult(null)} className="px-8">
-                Praise Master Oogway
+                Continue
               </Button>
             </div>
           </div>
         </Modal>
       )}
-
     </div>
   );
 };

@@ -9,6 +9,7 @@ import { resetLeaderboard } from '../store/leaderboardSlice';
 import { resetPuzzleState } from '../store/puzzleSlice';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { AlertDialogReset } from '../components/ui/AlertDialogReset';
 import { playSound } from '../utils/audio';
 import { 
   Moon, 
@@ -32,21 +33,13 @@ export const Settings: React.FC = () => {
   };
 
   const handleResetProgress = () => {
-    const confirmReset = window.confirm(
-      "WARNING: This will wipe all your kung fu belt progress, unlocked cards, solved puzzles, and leaderboard rankings. Are you sure you want to restart your training?"
-    );
-
-    if (confirmReset) {
-      playSound.failure(soundEnabled);
-      // Reset all slices
-      dispatch(resetUser());
-      dispatch(resetCards());
-      dispatch(resetAchievements());
-      dispatch(resetLeaderboard());
-      dispatch(resetPuzzleState());
-      dispatch(resetSettings());
-      alert("All training scrolls and belt progress have been reset to White Belt!");
-    }
+    playSound.failure(soundEnabled);
+    dispatch(resetUser(undefined));
+    dispatch(resetCards(undefined));
+    dispatch(resetAchievements(undefined));
+    dispatch(resetLeaderboard(undefined));
+    dispatch(resetPuzzleState(undefined));
+    dispatch(resetSettings(undefined));
   };
 
   return (
@@ -147,14 +140,18 @@ export const Settings: React.FC = () => {
             <p className="text-xs text-jade-dark/70 dark:text-parchment/70 leading-relaxed">
               Resetting progress will permanently erase your belt ratings, XP levels, collected scroll cards, and high scores. This action cannot be undone.
             </p>
-            <Button
-              variant="outline"
-              onClick={handleResetProgress}
-              className="border-red-500 text-red-600 hover:bg-red-50/50 dark:hover:bg-red-950/20"
-              size="sm"
-            >
-              <RotateCcw className="h-3.5 w-3.5 mr-1" /> Reset All Progress
-            </Button>
+            <AlertDialogReset
+              onConfirm={handleResetProgress}
+              trigger={
+                <Button
+                  variant="outline"
+                  className="border-red-500 text-red-600 hover:bg-red-50/50 dark:hover:bg-red-950/20"
+                  size="sm"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 mr-1" /> Reset All Progress
+                </Button>
+              }
+            />
           </div>
         </div>
       </Card>

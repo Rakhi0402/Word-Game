@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useAppSelector } from './store';
+import { useAppDispatch, useAppSelector } from './store';
+import { hydrateSession } from './store/session';
 import { assetPreloader } from './utils/preloader';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { Layout } from './components/layout/Layout';
 import { ProtectedRoute, PublicRoute } from './components/auth/AuthRoute';
 
-// Pages
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Home } from './pages/Home';
@@ -17,29 +17,34 @@ import { Profile } from './pages/Profile';
 import { Settings } from './pages/Settings';
 
 export const App: React.FC = () => {
+  const dispatch = useAppDispatch();
   const [loadingPercent, setLoadingPercent] = useState(0);
   const [preloadingComplete, setPreloadingComplete] = useState(false);
-  const isAuthenticated = useAppSelector(state => state.auth.isAuthenticated);
+  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
+  const email = useAppSelector((state) => state.auth.email);
+  const username = useAppSelector((state) => state.auth.username);
 
-  // Trigger preloading of background images and character card pack images
   useEffect(() => {
     const startPreloading = async () => {
       try {
         await assetPreloader.preloadAll((percent: number) => {
           setLoadingPercent(percent);
         });
-        // Tiny artificial pause for visual ease
-        setTimeout(() => {
-          setPreloadingComplete(true);
-        }, 300);
+        setTimeout(() => setPreloadingComplete(true), 300);
       } catch (err) {
-        console.error("Asset preloading encountered warnings", err);
+        console.error('Asset preloading encountered warnings', err);
         setPreloadingComplete(true);
       }
     };
 
-    startPreloading();
+    void startPreloading();
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated && email && username) {
+      void hydrateSession(dispatch, { email, username });
+    }
+  }, [dispatch, isAuthenticated, email, username]);
 
   if (!preloadingComplete) {
     return <LoadingSpinner progress={loadingPercent} />;
@@ -48,8 +53,6 @@ export const App: React.FC = () => {
   return (
     <BrowserRouter>
       <Routes>
-
-        {/* Public auth pages */}
         <Route
           path="/login"
           element={
@@ -67,7 +70,6 @@ export const App: React.FC = () => {
           }
         />
 
-        {/* Authenticated layout pages */}
         <Route
           path="/"
           element={
@@ -76,7 +78,6 @@ export const App: React.FC = () => {
             </ProtectedRoute>
           }
         >
-          {/* Default path redirects to Dojo dashboard */}
           <Route index element={<Navigate to="/home" replace />} />
           <Route path="home" element={<Home />} />
           <Route path="puzzle" element={<Puzzle />} />
@@ -86,12 +87,10 @@ export const App: React.FC = () => {
           <Route path="settings" element={<Settings />} />
         </Route>
 
-        {/* Fallback redirects */}
         <Route
           path="*"
-          element={<Navigate to={isAuthenticated ? "/home" : "/login"} replace />}
+          element={<Navigate to={isAuthenticated ? '/home' : '/login'} replace />}
         />
-
       </Routes>
     </BrowserRouter>
   );

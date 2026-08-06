@@ -3,7 +3,7 @@ import { useAppSelector } from '../store';
 import { Card } from '../components/ui/Card';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { Badge } from '../components/ui/Badge';
-import { CHARACTER_CARDS, BELT_LEVELS } from '../constants';
+import { CHARACTER_CARDS, BELT_LEVELS, getBeltProgress } from '../constants';
 import { 
   Zap, 
   Scroll, 
@@ -15,8 +15,7 @@ import {
   Calendar, 
   BookOpen, 
   CheckCircle2, 
-  Lock,
-  Clock 
+  Lock
 } from 'lucide-react';
 
 export const Profile: React.FC = () => {
@@ -28,21 +27,9 @@ export const Profile: React.FC = () => {
   const equippedCard = CHARACTER_CARDS.find(c => c.id === cards.equippedCardId) || CHARACTER_CARDS[0];
   const activeBelt = BELT_LEVELS.find(b => b.belt === user.belt) || BELT_LEVELS[0];
   const [isStreakCalendarOpen, setIsStreakCalendarOpen] = useState(false);
-
-  // Calculate days remaining for equipped card rewards
-  const getRewardExpirationInfo = () => {
-    if (!cards.equippedCardExpiresAt) return null;
-    const now = Date.now();
-    const expiresAt = cards.equippedCardExpiresAt;
-    const daysRemaining = Math.ceil((expiresAt - now) / (24 * 60 * 60 * 1000));
-    
-    if (daysRemaining <= 0) {
-      return { daysRemaining: 0, isExpired: true };
-    }
-    return { daysRemaining, isExpired: false };
-  };
-
-  const rewardExpiration = getRewardExpirationInfo();
+  const equippedCharges = cards.equippedCardId
+    ? cards.inventory[cards.equippedCardId]?.chargesRemaining
+    : null;
 
   const recentStreakDays = Array.from({ length: 14 }, (_, index) => {
     const date = new Date();
@@ -102,9 +89,9 @@ export const Profile: React.FC = () => {
             PARTNER
           </span>
 
-          {rewardExpiration && (
-            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 bg-gradient-to-b from-gold to-gold/80 text-jade-dark text-[9px] font-black uppercase px-3 py-1 rounded-full whitespace-nowrap shadow-lg">
-              Rewards: {rewardExpiration.daysRemaining}d
+          {equippedCharges != null && (
+            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gradient-to-b from-gold to-gold/80 px-3 py-1 text-[9px] font-black uppercase text-jade-dark shadow-lg">
+              {equippedCharges} charges
             </div>
           )}
         </div>
@@ -130,24 +117,16 @@ export const Profile: React.FC = () => {
               ⚡ Chi Level: {BELT_LEVELS.findIndex(b => b.belt === user.belt) + 1}
             </span>
 
-            {rewardExpiration && !rewardExpiration.isExpired && (
-              <span className="px-5 py-2 rounded-full bg-gold/20 border border-gold/40 text-xs font-bold text-gold flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                {rewardExpiration.daysRemaining}d Left
-              </span>
-            )}
-            {rewardExpiration && rewardExpiration.isExpired && (
-              <span className="px-5 py-2 rounded-full bg-red-500/20 border border-red-500/40 text-xs font-bold text-red-600 dark:text-red-400 flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Rewards Expired
-              </span>
-            )}
+            <span className="flex items-center gap-2 rounded-full border border-gold/40 bg-gold/20 px-5 py-2 text-xs font-bold text-gold">
+              <Shield className="h-4 w-4" />
+              {user.streakShields} Shields
+            </span>
           </div>
 
           <div className="mt-8 w-full">
             <ProgressBar
-              value={user.xp}
-              max={user.xpNeeded}
+              value={getBeltProgress(user.xp).value}
+              max={getBeltProgress(user.xp).max}
               label="Chi Experience (XP)"
               color="gold"
             />
@@ -171,7 +150,11 @@ export const Profile: React.FC = () => {
                   Daily Streak
                 </p>
                 <p className="text-2xl font-black text-jade-dark dark:text-parchment">
-                  {user.streak} Day{user.streak === 1 ? '' : 's'}
+                  {user.dailyStreak || user.streak} Day
+                  {(user.dailyStreak || user.streak) === 1 ? '' : 's'}
+                </p>
+                <p className="text-xs text-jade-dark/60 dark:text-parchment/60">
+                  Shields: {user.streakShields}
                 </p>
               </div>
             </div>

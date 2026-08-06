@@ -5,8 +5,8 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { ProgressBar } from '../components/ui/ProgressBar';
-import { CHARACTER_CARDS, BELT_LEVELS } from '../constants';
-import { Trophy, Star, Sparkles, BookOpen, Flame, Award } from 'lucide-react';
+import { CHARACTER_CARDS, BELT_LEVELS, getBeltProgress } from '../constants';
+import { Trophy, Star, Sparkles, BookOpen, Flame, Award} from 'lucide-react';
 
 export const Home: React.FC = () => {
   const user = useAppSelector((state) => state.user);
@@ -31,12 +31,15 @@ export const Home: React.FC = () => {
             Dojo Dashboard
           </h2>
           <p className="text-sm text-jade-dark/80 dark:text-parchment/70 font-medium">
-            Welcome back, <span className="font-bold text-gold">{user.username}</span>. Sharpen your mind for today's words.
+            Welcome back, <span className="font-bold text-black text-gold-glow">{user.username.toUpperCase()}</span>. Sharpen your mind for today's words.
           </p>
         </div>
-        <div className="flex items-center space-x-2 rounded-xl bg-gold/10 border border-gold/30 px-3 py-1.5 text-xs text-gold animate-lantern">
+        <div className="flex items-center space-x-2 rounded-xl bg-gold/10 border border-black/80 tpx-3 py-1.5 text-xs text-black text-gold-glow dark:text-gold dark:border-gold/80 animate-lantern">
           <Flame className="h-4 w-4 fill-gold" />
-          <span className="font-bold uppercase tracking-wider">{user.streak} Day Streak!</span>
+          <span className="font-bold uppercase tracking-wider">
+            {user.dailyStreak || user.streak} Day Streak
+            {user.streakShields > 0 ? ` · ${user.streakShields} Shields` : ''}
+          </span>
         </div>
       </div>
 
@@ -63,8 +66,8 @@ export const Home: React.FC = () => {
             </p>
 
             <ProgressBar 
-              value={user.xp} 
-              max={user.xpNeeded} 
+              value={getBeltProgress(user.xp).value} 
+              max={getBeltProgress(user.xp).max} 
               label="XP Progress to Next Belt"
               color="gold"
               className="text-parchment"
@@ -101,13 +104,20 @@ export const Home: React.FC = () => {
               ))}
             </div>
 
-            {/* Bonuses */}
-            <div className="mt-3 text-left space-y-1">
+            <div className="mt-3 space-y-1 text-left">
               {equippedCard.bonuses.map((bonus, idx) => (
-                <p key={idx} className="text-[10px] bg-jade-dark/50 text-parchment/90 border border-gold/10 px-2 py-1 rounded font-medium">
-                  🔥 {bonus}
+                <p
+                  key={idx}
+                  className="rounded border border-gold/10 bg-jade-dark/50 px-2 py-1 text-[10px] font-medium text-parchment/90"
+                >
+                  {bonus}
                 </p>
               ))}
+              {cards.equippedCardId && cards.inventory[cards.equippedCardId] && (
+                <p className="rounded border border-gold/20 px-2 py-1 text-[10px] font-bold text-gold">
+                  Charges: {cards.inventory[cards.equippedCardId].chargesRemaining}
+                </p>
+              )}
             </div>
           </div>
 
@@ -143,7 +153,7 @@ export const Home: React.FC = () => {
             variant="primary" 
             size="lg" 
             onClick={() => navigate('/puzzle')}
-            className="shrink-0 animate-bounce"
+            className="shrink-0 animate-lantern 8s ease-in-out infinite"
           >
             Enter Quest ➔
           </Button>

@@ -1,5 +1,9 @@
 export type BeltColor = 'White' | 'Yellow' | 'Orange' | 'Green' | 'Blue' | 'Brown' | 'Black';
 
+export type PuzzleDifficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert';
+
+export type CardStatus = 'available' | 'exhausted';
+
 export interface UserStats {
   wordsFound: number;
   cardsCollected: number;
@@ -7,6 +11,10 @@ export interface UserStats {
   highestScore: number;
   daysPlayed: number;
   puzzlesCompleted: number;
+  pangramsFound: number;
+  perfectPuzzles: number;
+  hintsUsed: number;
+  hintsBought: number;
 }
 
 export interface User {
@@ -18,8 +26,20 @@ export interface User {
   coins: number;
   streak: number;
   dailyStreak: number;
+  streakShields: number;
   characterMultiplier: number;
-  rank: string; // e.g., "Novice", "Disciple", "Warrior", "Grandmaster"
+  rank: string;
+  permanentExtraDailyHint: boolean;
+  bonusFreeHintsNextDay: number;
+  freeChestTokens: number;
+  claimedBeltRewards: BeltColor[];
+  claimedStreakMilestones: number[];
+  lastPuzzleDate: string | null;
+  lastDifficultyChosen: PuzzleDifficulty | null;
+  /** Calendar date for choicePuzzlesCompletedToday */
+  choicePuzzlesDate: string | null;
+  /** Extra difficulty-chosen puzzles finished today (cap MAX_CHOICE_PUZZLES_PER_DAY) */
+  choicePuzzlesCompletedToday: number;
   stats: UserStats;
 }
 
@@ -29,7 +49,7 @@ export interface CharacterCard {
   id: string;
   name: string;
   rarity: RarityType;
-  image: string; // Relative path from public folder
+  image: string;
   stars: number;
   bonuses: string[];
   description: string;
@@ -63,11 +83,11 @@ export interface FoundWord {
 
 export interface DailyPuzzle {
   id: string;
-  letters: string[]; // 7 letters
+  letters: string[];
   centerLetter: string;
-  validWords: string[]; // Words that can be made with these letters containing the center letter
+  validWords: string[];
   pangrams?: string[];
-  difficulty: 'Easy' | 'Medium' | 'Hard' | 'Expert';
+  difficulty: PuzzleDifficulty;
   xpReward: number;
   coinReward: number;
 }

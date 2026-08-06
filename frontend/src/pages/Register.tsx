@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAppDispatch } from '../store';
 import { loginSuccess } from '../store/authSlice';
-import { setUserProfile } from '../store/userSlice';
+import { hydrateSession } from '../store/session';
 import { authService } from '../services/authService';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -33,16 +33,18 @@ export const Register: React.FC = () => {
     const res = await authService.register(username, email, password);
 
     if (res.success && res.data) {
-      dispatch(loginSuccess({
+      dispatch(
+        loginSuccess({
+          email: res.data.email,
+          username: res.data.username,
+          token: res.data.token,
+        })
+      );
+      await hydrateSession(dispatch, {
         email: res.data.email,
         username: res.data.username,
-        token: res.data.token
-      }));
-      dispatch(setUserProfile({
-        username: res.data.username,
-        email: res.data.email
-      }));
-      navigate('/home');
+      });
+      navigate('/login');
     } else {
       setError(res.message || 'Registration failed. Try again.');
       setLoading(false);
@@ -50,25 +52,17 @@ export const Register: React.FC = () => {
   };
 
   return (
-    <div 
-      className="group relative flex min-h-screen items-center justify-center px-4 bg-jade text-parchment"
+    <div
+      className="relative flex min-h-screen items-center justify-center px-4 bg-jade text-parchment py-10"
       style={{
         backgroundImage: `url('/assets/background/login_bg.png')`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
     >
-      <div className="absolute inset-0 bg-jade-dark/70 opacity-0 transition-opacity duration-300 pointer-events-none z-0 group-hover:opacity-100" />
+      <div className="absolute inset-0 bg-jade-dark/50 pointer-events-none z-0" />
 
-      {/* Main Container */}
-      <div className="relative z-10 w-full max-w-md mt-40 mb-8">
-        
-        {/* Title Logo */}
-        <div className="text-center mb-6">
-          
-        </div>
-
-        {/* Form Card */}
+      <div className="relative z-10 w-full max-w-md my-8">
         <Card variant="wood" className="border-2 border-gold shadow-2xl">
           <h3 className="text-xl font-bold tracking-widest text-center text-gold mb-6 uppercase font-martial">
             Disciple Registry
@@ -81,11 +75,9 @@ export const Register: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            
-            {/* Username Field */}
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5">
+              <label htmlFor="reg-username" className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5">
                 Disciple Name (Username)
               </label>
               <div className="relative">
@@ -93,6 +85,7 @@ export const Register: React.FC = () => {
                   <User className="h-4 w-4" />
                 </span>
                 <input
+                  id="reg-username"
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -103,9 +96,8 @@ export const Register: React.FC = () => {
               </div>
             </div>
 
-            {/* Email Field */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5">
+              <label htmlFor="reg-email" className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5">
                 Scroll Address (Email)
               </label>
               <div className="relative">
@@ -113,6 +105,7 @@ export const Register: React.FC = () => {
                   <Mail className="h-4 w-4" />
                 </span>
                 <input
+                  id="reg-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -123,9 +116,8 @@ export const Register: React.FC = () => {
               </div>
             </div>
 
-            {/* Password Field */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5">
+              <label htmlFor="reg-password" className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5">
                 Secret Phrase (Password)
               </label>
               <div className="relative">
@@ -133,6 +125,7 @@ export const Register: React.FC = () => {
                   <Lock className="h-4 w-4" />
                 </span>
                 <input
+                  id="reg-password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -143,9 +136,8 @@ export const Register: React.FC = () => {
               </div>
             </div>
 
-            {/* Confirm Password Field */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5">
+              <label htmlFor="reg-confirm" className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5">
                 Verify Secret Phrase
               </label>
               <div className="relative">
@@ -153,6 +145,7 @@ export const Register: React.FC = () => {
                   <Lock className="h-4 w-4" />
                 </span>
                 <input
+                  id="reg-confirm"
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
@@ -163,19 +156,11 @@ export const Register: React.FC = () => {
               </div>
             </div>
 
-            {/* Submit Button */}
-            <Button
-              type="submit"
-              variant="primary"
-              fullWidth
-              disabled={loading}
-              className="mt-6"
-            >
+            <Button type="submit" variant="primary" fullWidth disabled={loading} className="mt-6">
               {loading ? 'Registering...' : 'Begin Training'}
             </Button>
           </form>
 
-          {/* Login Link */}
           <div className="mt-6 text-center text-xs text-parchment/70 border-t border-gold/25 pt-4">
             Already registered?{' '}
             <Link to="/login" className="font-bold text-gold hover:text-gold-light hover:underline uppercase tracking-wide">

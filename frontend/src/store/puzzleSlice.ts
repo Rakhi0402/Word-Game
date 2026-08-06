@@ -1,11 +1,12 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import type { DailyPuzzle, FoundWord } from '../types';
+import { DIFFICULTY_CONFIG, wordStreakExtra, MAX_WORD_INPUT_LENGTH } from '../constants/rewards';
 
 interface PuzzleState {
   activePuzzleId: string | null;
-  letters: string[]; // Shuffled display representation (first one is center, or we separate them)
+  letters: string[];
   centerLetter: string;
-  outerLetters: string[]; // Outer 6 letters
+  outerLetters: string[];
   currentWord: string;
   validWords: string[];
   wordsFound: FoundWord[];
@@ -24,6 +25,9 @@ interface PuzzleState {
   totalValidWords: number;
   lastRejectedWord: string | null;
   lastRejectedReason: 'duplicate' | 'invalid' | null;
+  hintsUsedThisPuzzle: number;
+  /** True = featured daily attempt (once/day); false = optional choice puzzle */
+  isDailySession: boolean;
 }
 
 const initialState: PuzzleState = {
@@ -49,9 +53,10 @@ const initialState: PuzzleState = {
   totalValidWords: 0,
   lastRejectedWord: null,
   lastRejectedReason: null,
+  hintsUsedThisPuzzle: 0,
+  isDailySession: true,
 };
 
-// Fisher-Yates shuffle helper
 const shuffleArray = (array: string[]) => {
   const arr = [...array];
   for (let i = arr.length - 1; i > 0; i--) {
@@ -65,8 +70,12 @@ const puzzleSlice = createSlice({
   name: 'puzzle',
   initialState,
   reducers: {
-    loadPuzzle: (state, action: PayloadAction<DailyPuzzle>) => {
-      const puzzle = action.payload;
+    loadPuzzle: (
+      state,
+      action: PayloadAction<{ puzzle: DailyPuzzle; isDailySession?: boolean }>
+    ) => {
+      const puzzle = action.payload.puzzle;
+      state.isDailySession = action.payload.isDailySession ?? false;
       state.activePuzzleId = puzzle.id;
       state.centerLetter = puzzle.centerLetter;
       const outer = puzzle.letters.filter((l) => l !== puzzle.centerLetter);
@@ -84,15 +93,10 @@ const puzzleSlice = createSlice({
       state.xpReward = puzzle.xpReward;
       state.coinReward = puzzle.coinReward;
       state.totalValidWordsCount = puzzle.validWords.length;
-      const targetMap = {
-        Easy: 10,
-        Medium: 15,
-        Hard: 20,
-        Expert: 25,
-      } as const;
-      state.requiredWordsToComplete = Math.min(
-        puzzle.validWords.length,
-        targetMap[puzzle.difficulty]
+      const target = DIFFICULTY_CONFIG[puzzle.difficulty].targetWords;
+      state.requiredWordsToComplete = Math.max(
+        1,
+        Math.min(Math.max(puzzle.validWords.length, 1), target)
       );
       const derivedPangrams = puzzle.pangrams?.length
         ? puzzle.pangrams
@@ -104,8 +108,33 @@ const puzzleSlice = createSlice({
       state.totalValidWords = puzzle.validWords.length;
       state.lastRejectedWord = null;
       state.lastRejectedReason = null;
+      state.hintsUsedThisPuzzle = 0;
     },
     selectLetter: (state, action: PayloadAction<string>) => {
+      if (state.completed || state.locked) return;
+      if (state.currentWord.length >= MAX_WORD_INPUT_LENGTH) {
+        // #region agent log
+        if (typeof fetch !== 'undefined') {
+          fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Debug-Session-Id': '156feb',
+            },
+            body: JSON.stringify({
+              sessionId: '156feb',
+              runId: 'ui-fix',
+              hypothesisId: 'H1',
+              location: 'puzzleSlice.ts:selectLetter',
+              message: 'blocked letter — at max input length',
+              data: { len: state.currentWord.length, max: MAX_WORD_INPUT_LENGTH, letter: action.payload },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+        }
+        // #endregion
+        return;
+      }
       state.currentWord += action.payload;
       state.lastRejectedWord = null;
       state.lastRejectedReason = null;
@@ -125,41 +154,54 @@ const puzzleSlice = createSlice({
       state.lastRejectedWord = null;
       state.lastRejectedReason = null;
     },
-    submitWordSuccess: (state, action: PayloadAction<FoundWord>) => {
-      state.wordsFound.push(action.payload);
-      const pangramBonus = action.payload.isPangram ? 75 : 0;
-      state.score += action.payload.score + pangramBonus;
+    submitWordSuccess: (
+      state,
+      action: PayloadAction<FoundWord & { scoreBonusPercent?: number }>
+    ) => {
+      state.wordsFound.push({
+        text: action.payload.text,
+        score: action.payload.score,
+        isPangram: action.payload.isPangram,
+      });
+      state.streak += 1;
+      const streakExtra = wordStreakExtra(state.streak);
+      const scoreBonus = action.payload.scoreBonusPercent ?? 0;
+      const raw = action.payload.score + streakExtra;
+      state.score += Math.round(raw * (1 + scoreBonus));
       if (action.payload.isPangram) {
         state.pangramsFound.push(action.payload.text);
       }
-      state.streak += 1;
       state.currentWord = '';
       state.lastRejectedWord = null;
       state.lastRejectedReason = null;
-
       if (state.wordsFound.length >= state.requiredWordsToComplete) {
         state.completed = true;
       }
     },
     revealHint: (state) => {
-      const remainingHints = state.validWords.filter(
+      const remaining = state.validWords.filter(
         (word) =>
           !state.wordsFound.some((found) => found.text === word) &&
           !state.hintedWords.includes(word)
       );
-      if (remainingHints.length === 0) return;
-      const nextHint = remainingHints[
-        Math.floor(Math.random() * remainingHints.length)
-      ];
+      if (remaining.length === 0) return;
+      const nextHint = remaining[Math.floor(Math.random() * remaining.length)];
       state.hintedWords.push(nextHint);
+      state.hintsUsedThisPuzzle += 1;
     },
-    submitWordFailure: (state, action: PayloadAction<{ retainStreak: boolean; reason?: 'duplicate' | 'invalid' | null; word?: string | null }>) => {
-      if (!action.payload.retainStreak) {
-        state.streak = 0;
-      }
+    submitWordFailure: (
+      state,
+      action: PayloadAction<{
+        retainStreak: boolean;
+        reason?: 'duplicate' | 'invalid' | null;
+        word?: string | null;
+      }>
+    ) => {
+      if (!action.payload.retainStreak) state.streak = 0;
       state.currentWord = '';
       state.lastRejectedReason = action.payload.reason ?? null;
-      state.lastRejectedWord = action.payload.reason === 'duplicate' ? action.payload.word ?? null : null;
+      state.lastRejectedWord =
+        action.payload.reason === 'duplicate' ? action.payload.word ?? null : null;
     },
     forceCompletePuzzle: (state) => {
       state.completed = true;
@@ -170,8 +212,57 @@ const puzzleSlice = createSlice({
     lockPuzzle: (state) => {
       state.locked = true;
     },
-    resetPuzzleState: () => initialState
-  }
+    restoreCompletedPuzzle: (
+      state,
+      action: PayloadAction<{
+        puzzle: DailyPuzzle;
+        wordsFound: FoundWord[];
+        score: number;
+        pangramsFound: string[];
+        hintedWords: string[];
+        streak: number;
+        hintsUsedThisPuzzle?: number;
+        isDailySession?: boolean;
+      }>
+    ) => {
+      const puzzle = action.payload.puzzle;
+      state.isDailySession = action.payload.isDailySession ?? true;
+      state.activePuzzleId = puzzle.id;
+      state.centerLetter = puzzle.centerLetter;
+      const outer = puzzle.letters.filter((l) => l !== puzzle.centerLetter);
+      state.outerLetters = outer;
+      state.letters = [puzzle.centerLetter, ...outer];
+      state.currentWord = '';
+      state.validWords = puzzle.validWords;
+      state.wordsFound = action.payload.wordsFound;
+      state.hintedWords = action.payload.hintedWords;
+      state.score = action.payload.score;
+      state.streak = action.payload.streak;
+      state.completed = true;
+      state.locked = true;
+      state.difficulty = puzzle.difficulty;
+      state.xpReward = puzzle.xpReward;
+      state.coinReward = puzzle.coinReward;
+      state.totalValidWordsCount = puzzle.validWords.length;
+      const target = DIFFICULTY_CONFIG[puzzle.difficulty].targetWords;
+      state.requiredWordsToComplete = Math.max(
+        1,
+        Math.min(Math.max(puzzle.validWords.length, 1), target)
+      );
+      const derivedPangrams = puzzle.pangrams?.length
+        ? puzzle.pangrams
+        : puzzle.validWords.filter((word) =>
+            puzzle.letters.every((letter) => word.includes(letter))
+          );
+      state.pangrams = derivedPangrams;
+      state.pangramsFound = action.payload.pangramsFound;
+      state.totalValidWords = puzzle.validWords.length;
+      state.lastRejectedWord = null;
+      state.lastRejectedReason = null;
+      state.hintsUsedThisPuzzle = action.payload.hintsUsedThisPuzzle ?? 0;
+    },
+    resetPuzzleState: () => initialState,
+  },
 });
 
 export const {
@@ -186,6 +277,7 @@ export const {
   completePuzzle,
   lockPuzzle,
   revealHint,
+  restoreCompletedPuzzle,
   resetPuzzleState,
 } = puzzleSlice.actions;
 

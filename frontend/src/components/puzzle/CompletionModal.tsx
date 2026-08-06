@@ -1,18 +1,20 @@
-import React from "react";
-import { CheckCircle2, Sparkles, Share2 } from "lucide-react";
-import { Button } from "../ui/Button";
-import { RewardSummary } from "./RewardSummary";
-import type { RewardCalculation } from "../../hooks/rewardCalculator";
+import React from 'react';
+import { CheckCircle2, Sparkles, Share2 } from 'lucide-react';
+import { Button } from '../ui/Button';
+import { RewardSummary } from './RewardSummary';
+import type { RewardCalculation } from '../../hooks/rewardCalculator';
+import type { BeltUpResult } from '../../store/userSlice';
 
 interface CompletionModalProps {
   isOpen: boolean;
-  difficulty: "Easy" | "Medium" | "Hard" | "Expert";
+  difficulty: 'Easy' | 'Medium' | 'Hard' | 'Expert';
   wordsFound: number;
   targetWords: number;
   pangramsFound: number;
   totalPangrams: number;
   score: number;
   rewards: RewardCalculation | null;
+  beltUps?: BeltUpResult[];
   onContinue: () => void;
   onShare?: () => void;
 }
@@ -26,69 +28,43 @@ export const CompletionModal: React.FC<CompletionModalProps> = ({
   totalPangrams,
   score,
   rewards,
+  beltUps = [],
   onContinue,
   onShare,
 }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
         <div className="text-center">
-          <CheckCircle2
-            className="mx-auto text-green-500"
-            size={60}
-          />
-
-          <h2 className="mt-4 text-3xl font-bold">
-            Daily Puzzle Complete!
-          </h2>
-
+          <CheckCircle2 className="mx-auto text-green-500" size={60} />
+          <h2 className="mt-4 text-3xl font-bold">Puzzle Complete!</h2>
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-            Congratulations! Your rewards have been calculated.
+            Fixed difficulty rewards plus card, streak, and pangram modifiers.
           </p>
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-
           <div className="rounded-lg border border-gold/20 p-4 text-center">
-            <p className="text-xs uppercase text-gray-500">
-              Difficulty
-            </p>
-            <p className="mt-2 text-xl font-bold">
-              {difficulty}
-            </p>
+            <p className="text-xs uppercase text-gray-500">Difficulty</p>
+            <p className="mt-2 text-xl font-bold">{difficulty}</p>
           </div>
-
           <div className="rounded-lg border border-gold/20 p-4 text-center">
-            <p className="text-xs uppercase text-gray-500">
-              Score
-            </p>
-            <p className="mt-2 text-xl font-bold">
-              {score}
-            </p>
+            <p className="text-xs uppercase text-gray-500">Score</p>
+            <p className="mt-2 text-xl font-bold">{score}</p>
           </div>
-
           <div className="rounded-lg border border-gold/20 p-4 text-center">
-            <p className="text-xs uppercase text-gray-500">
-              Words Found
-            </p>
+            <p className="text-xs uppercase text-gray-500">Words Found</p>
             <p className="mt-2 text-xl font-bold">
               {wordsFound}/{targetWords}
             </p>
           </div>
-
           <div className="rounded-lg border border-gold/20 p-4 text-center">
             <div className="flex items-center justify-center gap-1">
-              <Sparkles
-                size={18}
-                className="text-purple-500"
-              />
-              <span className="text-xs uppercase text-gray-500">
-                Pangrams
-              </span>
+              <Sparkles size={18} className="text-purple-500" />
+              <span className="text-xs uppercase text-gray-500">Pangrams</span>
             </div>
-
             <p className="mt-2 text-xl font-bold">
               {pangramsFound}/{totalPangrams}
             </p>
@@ -100,33 +76,32 @@ export const CompletionModal: React.FC<CompletionModalProps> = ({
             <RewardSummary
               xp={rewards.xp}
               coins={rewards.coins}
+              baseXp={rewards.baseXp}
+              baseCoins={rewards.baseCoins}
               pangramBonus={rewards.pangramBonus}
+              pangramCoins={rewards.pangramCoins}
+              perfectBonus={rewards.perfectBonus}
               streakBonus={rewards.streakBonus}
+              streakCoins={rewards.streakCoins}
               characterBonus={rewards.characterBonus}
+              characterCoins={rewards.characterCoins}
+              hintPenalty={rewards.hintPenalty}
               achievement={rewards.achievement}
+              beltUps={beltUps}
             />
           </div>
         )}
 
         <div className="mt-6 flex justify-end gap-3">
-
           {onShare && (
-            <Button
-              variant="outline"
-              onClick={onShare}
-            >
+            <Button variant="outline" onClick={onShare}>
               <Share2 className="mr-2 h-4 w-4" />
               Share
             </Button>
           )}
-
-          <Button
-            variant="primary"
-            onClick={onContinue}
-          >
+          <Button variant="primary" onClick={onContinue}>
             Continue
           </Button>
-
         </div>
       </div>
     </div>

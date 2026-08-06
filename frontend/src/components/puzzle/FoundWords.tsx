@@ -21,7 +21,7 @@ export const FoundWords: React.FC = () => {
   }, [filteredWords]);
 
   return (
-    <div className="rounded-xl border border-gold/80 p-5 bg-parchment/85 dark:bg-black/20 text-gold/90">
+    <div className="rounded-xl border border-gold/80 p-5 bg-parchment/95 dark:bg-black/20 text-gold/90">
       <div className="items-center justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold text-gold">
@@ -31,7 +31,7 @@ export const FoundWords: React.FC = () => {
             {puzzle.wordsFound.length} of {puzzle.totalValidWords} words found
           </p>
         </div>
-        <div className=" items-center gap-2 rounded-lg border border-gold/80 px-3 py-2 bg-parchment/20 text-gold flex">
+        <div className=" items-center gap-2 rounded-lg border border-gold px-3 py-2 bg-parchment/20 text-gold flex">
           <Search size={16} />
           <input
             type="text"
@@ -66,8 +66,8 @@ export const FoundWords: React.FC = () => {
                     className={
                       `rounded-lg border px-4 py-3 transition-all duration-200 ${
                         word.isPangram
-                          ? "border-purple-400 bg-purple-500/10"
-                          : "border-gold/10 bg-gold/5 text-gold/90"
+                          ? "border-purple-400 bg-purple-500/10 text-purple-400"
+                          : "border-gold/80 bg-gold/15 text-gold/90"
                       } ${
                         isDuplicateFlash
                           ? "border-red-400 bg-red-500/20 shadow-[0_0_0_2px_rgba(248,113,113,0.35)]"

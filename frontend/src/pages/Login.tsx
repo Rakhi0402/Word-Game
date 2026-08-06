@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAppDispatch } from '../store';
 import { loginSuccess } from '../store/authSlice';
-import { setUserProfile } from '../store/userSlice';
+import { hydrateSession } from '../store/session';
 import { authService } from '../services/authService';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -13,7 +13,7 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
@@ -25,15 +25,17 @@ export const Login: React.FC = () => {
     const res = await authService.login(email, password);
 
     if (res.success && res.data) {
-      dispatch(loginSuccess({
+      dispatch(
+        loginSuccess({
+          email: res.data.email,
+          username: res.data.username,
+          token: res.data.token,
+        })
+      );
+      await hydrateSession(dispatch, {
         email: res.data.email,
         username: res.data.username,
-        token: res.data.token
-      }));
-      dispatch(setUserProfile({
-        username: res.data.username,
-        email: res.data.email
-      }));
+      });
       navigate('/home');
     } else {
       setError(res.message || 'Login failed. Try again.');
@@ -42,22 +44,17 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div 
-      className="group relative flex min-h-screen items-center justify-center px-4 bg-jade text-parchment"
+    <div
+      className="relative flex min-h-screen items-center justify-center px-4 bg-jade text-parchment"
       style={{
         backgroundImage: `url('/assets/background/login_bg.png')`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
     >
-      <div className="absolute inset-0 bg-jade-dark/70 opacity-0 transition-opacity duration-300 pointer-events-none z-0 group-hover:opacity-100" />
+      <div className="absolute inset-0 bg-jade-dark/50 pointer-events-none z-0" />
 
-      {/* Main Container */}
       <div className="relative z-10 w-full max-w-md">
-        
-        
-
-        {/* Form Card */}
         <Card variant="wood" className="border-2 border-gold shadow-2xl">
           <h3 className="text-xl font-bold tracking-widest text-center text-gold mb-6 uppercase font-martial">
             Academy Entry
@@ -70,11 +67,9 @@ export const Login: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            
-            {/* Email Field */}
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5">
+              <label htmlFor="login-email" className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5">
                 Scroll Address (Email)
               </label>
               <div className="relative">
@@ -82,6 +77,7 @@ export const Login: React.FC = () => {
                   <Mail className="h-4 w-4" />
                 </span>
                 <input
+                  id="login-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -92,9 +88,8 @@ export const Login: React.FC = () => {
               </div>
             </div>
 
-            {/* Password Field */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5">
+              <label htmlFor="login-password" className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5">
                 Secret Phrase (Password)
               </label>
               <div className="relative">
@@ -102,6 +97,7 @@ export const Login: React.FC = () => {
                   <Lock className="h-4 w-4" />
                 </span>
                 <input
+                  id="login-password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -112,19 +108,11 @@ export const Login: React.FC = () => {
               </div>
             </div>
 
-            {/* Submit Button */}
-            <Button
-              type="submit"
-              variant="primary"
-              fullWidth
-              disabled={loading}
-              className="mt-6"
-            >
+            <Button type="submit" variant="primary" fullWidth disabled={loading} className="mt-6">
               {loading ? 'Opening Gates...' : 'Enter Dojo'}
             </Button>
           </form>
 
-          {/* Register Link */}
           <div className="mt-6 text-center text-xs text-parchment/70 border-t border-gold/25 pt-4">
             New disciple?{' '}
             <Link to="/register" className="font-bold text-gold hover:text-gold-light hover:underline uppercase tracking-wide">

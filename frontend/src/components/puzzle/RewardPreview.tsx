@@ -1,82 +1,50 @@
-import React from "react";
+import React from 'react';
+import { Coins, Star, Sparkles, Award, Gem } from 'lucide-react';
+import { useAppSelector } from '../../store';
 import {
-  Coins,
-  Star,
-  Gem,
-  Sparkles,
-  Award,
-} from "lucide-react";
-
-import { useAppSelector } from "../../store";
+  DIFFICULTY_CONFIG,
+  PANGRAM_BONUS_XP,
+  DAY_STREAK_XP_PER,
+  HINT_XP_PENALTY_PERCENT,
+} from '../../constants/rewards';
 
 export const RewardPreview: React.FC = () => {
   const puzzle = useAppSelector((state) => state.puzzle);
+  const base = DIFFICULTY_CONFIG[puzzle.difficulty] ?? DIFFICULTY_CONFIG.Easy;
 
-  const rewards = {
-    Easy: {
-      xp: 100,
-      coins: 50,
-      completion: 25,
-      pangram: 75,
-    },
-    Medium: {
-      xp: 175,
-      coins: 100,
-      completion: 50,
-      pangram: 150,
-    },
-    Hard: {
-      xp: 300,
-      coins: 175,
-      completion: 100,
-      pangram: 250,
-    },
-    Expert: {
-      xp: 450,
-      coins: 300,
-      completion: 150,
-      pangram: 350,
-    },
-  }[puzzle.difficulty];
-
-  const cards = [
+  const rows = [
     {
       icon: <Star size={18} className="text-yellow-400" />,
-      label: "XP",
-      value: `+${rewards.xp}`,
+      label: 'Fixed Base XP',
+      value: `+${base.baseXp}`,
     },
     {
       icon: <Coins size={18} className="text-yellow-500" />,
-      label: "Coins",
-      value: `+${rewards.coins}`,
+      label: 'Fixed Base Coins',
+      value: `+${base.baseCoins}`,
     },
     {
       icon: <Sparkles size={18} className="text-purple-400" />,
-      label: "Pangram Bonus",
-      value: `+${rewards.pangram}`,
+      label: 'Pangram Bonus (each)',
+      value: `+${PANGRAM_BONUS_XP} XP`,
     },
     {
       icon: <Award size={18} className="text-green-500" />,
-      label: "Completion Bonus",
-      value: `+${rewards.completion}`,
+      label: 'Day Streak Bonus',
+      value: `+${DAY_STREAK_XP_PER} XP / day (cap 14)`,
     },
     {
       icon: <Gem size={18} className="text-cyan-400" />,
-      label: "Character Boost",
-      value: "Variable",
+      label: 'Star-Tier Card Boost',
+      value: '% of fixed base',
     },
   ];
 
   return (
     <div className="rounded-xl border border-gold/20 p-5">
-
-      <h3 className="mb-4 text-lg font-bold">
-        Reward Preview
-      </h3>
-
+      <h3 className="mb-4 text-lg font-bold">Reward Preview</h3>
       <div className="space-y-3">
-
-        {cards.map((reward) => (
+        {rows.map((reward) => (
           <div
             key={reward.label}
             className="flex items-center justify-between rounded-lg border border-gold/10 bg-gold/5 px-3 py-2"
@@ -85,21 +53,14 @@ export const RewardPreview: React.FC = () => {
               {reward.icon}
               <span>{reward.label}</span>
             </div>
-
-            <span className="font-bold">
-              {reward.value}
-            </span>
+            <span className="font-bold">{reward.value}</span>
           </div>
         ))}
-
       </div>
-
       <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
-        Final rewards are calculated after puzzle completion and
-        include character card multipliers, streak bonuses,
-        achievements, and special event bonuses.
+        Completion = fixed base + pangram + perfect + day streak + star % of base. Any hint → −
+        {HINT_XP_PENALTY_PERCENT}% XP. Profile XP & coins update only when the puzzle is completed.
       </p>
-
     </div>
   );
 };

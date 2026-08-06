@@ -13,7 +13,7 @@ export const Layout: React.FC = () => {
       case '/home':
         return '/assets/background/home_bg.png';
       case '/puzzle':
-        return '/assets/background/puzzle_bg.jpg'; 
+        return '/assets/background/puzzle_bg.jpg';
       case '/collection':
         return '/assets/background/card_coll_bg.jpeg';
       case '/leaderboard':

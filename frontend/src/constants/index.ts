@@ -1,14 +1,18 @@
 import type { CharacterCard, BeltColor, DailyPuzzle, Achievement } from '../types';
+import { BELT_PROGRESSION, DIFFICULTY_CONFIG } from './rewards';
+import { describeStarTier } from './gameRules';
 
-export const BELT_LEVELS: { belt: BeltColor; minXp: number; title: string; colorClass: string }[] = [
-  { belt: 'White',  minXp: 0,    title: 'Novice Disciple',  colorClass: 'bg-slate-200 text-slate-800' },
-  { belt: 'Yellow', minXp: 100,  title: 'Temple Initiate',  colorClass: 'bg-yellow-400 text-yellow-900' },
-  { belt: 'Orange', minXp: 300,  title: 'Bamboo Striker',   colorClass: 'bg-orange-500 text-white' },
-  { belt: 'Green',  minXp: 600,  title: 'Jade Defender',    colorClass: 'bg-emerald-600 text-white' },
-  { belt: 'Blue',   minXp: 1000, title: 'Flowing Crane',    colorClass: 'bg-blue-600 text-white' },
-  { belt: 'Brown',  minXp: 1500, title: 'Earth Tiger',      colorClass: 'bg-amber-800 text-white' },
-  { belt: 'Black',  minXp: 2500, title: 'Dragon Master',    colorClass: 'bg-slate-900 text-amber-400 border border-amber-400' },
-];
+// Re-export belt progression as BELT_LEVELS for existing imports
+export const BELT_LEVELS = BELT_PROGRESSION.map((b) => ({
+  belt: b.belt as BeltColor,
+  minXp: b.minXp,
+  title: b.title,
+  colorClass: b.colorClass,
+}));
+
+export { BELT_PROGRESSION, DIFFICULTY_CONFIG };
+
+const flavorBonuses = (stars: number): string[] => describeStarTier(stars);
 
 export const CHARACTER_CARDS: CharacterCard[] = [
   {
@@ -17,7 +21,7 @@ export const CHARACTER_CARDS: CharacterCard[] = [
     rarity: 'common',
     image: '/assets/card_pack/po_common.png',
     stars: 1,
-    bonuses: ['+10% Score bonus on Common Words', '+10 XP per Puzzle Completed', '+2 Streak Shield Tokens'],
+    bonuses: flavorBonuses(1),
     description: 'A passionate panda who dreams of kung fu greatness. Slow but full of determination.',
   },
   {
@@ -26,7 +30,7 @@ export const CHARACTER_CARDS: CharacterCard[] = [
     rarity: 'common',
     image: '/assets/card_pack/monkey_common.png',
     stars: 1,
-    bonuses: ['+10Submission Speed Bonus', '+5 Coins on 4-Letter Words', '+2 Streak Shield Tokens'],
+    bonuses: flavorBonuses(1),
     description: 'Playful, mischievous, and incredibly agile. Monkey uses speed and trickery to confuse foes.',
   },
   {
@@ -35,7 +39,7 @@ export const CHARACTER_CARDS: CharacterCard[] = [
     rarity: 'common',
     image: '/assets/card_pack/crane_common.png',
     stars: 1,
-    bonuses: ['Hover Ability: Shuffles are free', '+10 XP on Easy Puzzles', '+2 Streak Shield Tokens'],
+    bonuses: flavorBonuses(1),
     description: 'Calm and steady. Crane utilizes defensive maneuvers to redirect enemy force with grace.',
   },
   {
@@ -44,7 +48,7 @@ export const CHARACTER_CARDS: CharacterCard[] = [
     rarity: 'rare',
     image: '/assets/card_pack/mantis_rare.png',
     stars: 3,
-    bonuses: ['Pinpoint Strike: Double points for 5-letter words', '+20 XP per Puzzle Completed'],
+    bonuses: flavorBonuses(3),
     description: 'Small but mighty. Mantis strikes with absolute precision and blinding speed.',
   },
   {
@@ -53,7 +57,7 @@ export const CHARACTER_CARDS: CharacterCard[] = [
     rarity: 'rare',
     image: '/assets/card_pack/viper_rare.png',
     stars: 3,
-    bonuses: ['Coiled Defense: Retain streak on first invalid word', '+10 Coins per Puzzle Completed'],
+    bonuses: flavorBonuses(3),
     description: 'A compassionate dancer who fights with flexible and unpredictable strikes.',
   },
   {
@@ -62,7 +66,7 @@ export const CHARACTER_CARDS: CharacterCard[] = [
     rarity: 'rare',
     image: '/assets/card_pack/tigress_rare.png',
     stars: 3,
-    bonuses: ['Tiger Claw: Double points for words starting with Center Letter', '+15% Score Overall'],
+    bonuses: flavorBonuses(3),
     description: 'The strongest and most dedicated of the Furious Five. Fierce, disciplined, and powerful.',
   },
   {
@@ -71,7 +75,7 @@ export const CHARACTER_CARDS: CharacterCard[] = [
     rarity: 'epic',
     image: '/assets/card_pack/shifu_epic.png',
     stars: 4,
-    bonuses: ['Inner Peace: Double streak score multipliers', '+25% Coins from all sources'],
+    bonuses: flavorBonuses(4),
     description: 'The wise master of the Jade Palace. Patiently guides others to unlock their inner potential.',
   },
   {
@@ -80,7 +84,7 @@ export const CHARACTER_CARDS: CharacterCard[] = [
     rarity: 'epic',
     image: '/assets/card_pack/dragon_warrior_po_epic.png',
     stars: 4,
-    bonuses: ['Wuxi Finger Hold: Auto-reveal 1 word per puzzle', '+35% XP Overall', '+20% Score Overall'],
+    bonuses: flavorBonuses(4),
     description: 'The legendary Dragon Warrior. Combines body weight, noodle-eating stamina, and inner peace.',
   },
   {
@@ -89,55 +93,85 @@ export const CHARACTER_CARDS: CharacterCard[] = [
     rarity: 'legendary',
     image: '/assets/card_pack/oogway_legendary.png',
     stars: 5,
-    bonuses: [
-      'Universal Harmony: Free word suggestions',
-      'Double XP & Coins from all puzzles',
-      'Instantly clear letter wheel once per puzzle for a massive score multiplier',
-    ],
+    bonuses: flavorBonuses(5),
     description: 'The founder of Kung Fu and the Valley of Peace. His wisdom is infinite and his moves are timeless.',
   },
 ];
 
 export const DAILY_PUZZLES: DailyPuzzle[] = [
   {
-    id: 'puzzle_1',
+    id: 'daily_puzzle_1',
     letters: ['A', 'D', 'N', 'P', 'S', 'T', 'G'],
     centerLetter: 'A',
     validWords: [
-      'PANDA','PANDAS','SAND','SPAN','SNAP','PAST','SPAT','TAPS',
-      'PANS','PATS','NAPS','STAND','SAT','AND','TAG','TAGS',
-      'GASP','GAP','GAPS','PANG','PANGS','PAGAN','PAGANS', 'STANDGAP',
+      'PANDA', 'PANDAS', 'SAND', 'SPAN', 'SNAP', 'PAST', 'SPAT', 'TAPS',
+      'PANS', 'PATS', 'NAPS', 'STAND', 'TAGS', 'GASP', 'GAPS', 'PANG',
+      'PANGS', 'PAGAN', 'PAGANS', 'DATA', 'ADAPT', 'GAITS', 'STANG',
     ],
+    pangrams: ['STANDGAP'],
     difficulty: 'Easy',
-    xpReward: 50,
-    coinReward: 25,
+    xpReward: DIFFICULTY_CONFIG.Easy.baseXp,
+    coinReward: DIFFICULTY_CONFIG.Easy.baseCoins,
   },
   {
-    id: 'puzzle_2',
+    id: 'daily_puzzle_2',
     letters: ['D', 'R', 'A', 'G', 'O', 'N', 'S'],
     centerLetter: 'O',
     validWords: [
-      'DRAGON','DRAGONS','ROAD','ROADS','ORGAN','ORGANS','SONG',
-      'SONGS','SOAR','GROAN','GROANS','DONOR','DONORS','GOAD','GOADS','RADON',
+      'DRAGON', 'DRAGONS', 'ROAD', 'ROADS', 'ORGAN', 'ORGANS', 'SONG',
+      'SONGS', 'SOAR', 'GROAN', 'GROANS', 'DONOR', 'DONORS', 'GOAD', 'GOADS',
+      'RADON', 'SAGO', 'ORANG', 'ORANGS', 'DRAGOONS',
     ],
+    pangrams: ['DRAGONS'],
     difficulty: 'Medium',
-    xpReward: 100,
-    coinReward: 50,
+    xpReward: DIFFICULTY_CONFIG.Medium.baseXp,
+    coinReward: DIFFICULTY_CONFIG.Medium.baseCoins,
   },
   {
-    id: 'puzzle_3',
+    id: 'daily_puzzle_3',
     letters: ['E', 'M', 'A', 'S', 'T', 'R', 'C'],
     centerLetter: 'E',
     validWords: [
-      'MASTER','MASTERS','STEAM','TEAMS','SEAM','MEAT','TAME',
-      'CRATE','CRATES','CREAM','CREAMS','SCREAM','SCREAMS','ACRE',
-      'ACRES','TEAR','TEARS','STARE','RATES','MATE','MATES','STREAMCASTER',
+      'MASTER', 'MASTERS', 'STEAM', 'TEAMS', 'SEAM', 'MEAT', 'TAME',
+      'CRATE', 'CRATES', 'CREAM', 'CREAMS', 'SCREAM', 'SCREAMS', 'ACRE',
+      'ACRES', 'TEAR', 'TEARS', 'STARE', 'RATES', 'MATE', 'MATES', 'STREAM',
+      'STREAMS', 'CREST', 'REACT', 'TRACES',  'CREAMS', 'STREAMCASTER',
     ],
+    pangrams: ['STREAMCASTER'],
     difficulty: 'Hard',
-    xpReward: 200,
-    coinReward: 100,
+    xpReward: DIFFICULTY_CONFIG.Hard.baseXp,
+    coinReward: DIFFICULTY_CONFIG.Hard.baseCoins,
+  },
+  {
+    id: 'daily_puzzle_4',
+    letters: ['L', 'I', 'G', 'H', 'T', 'E', 'R'],
+    centerLetter: 'E',
+    validWords: [
+       'LIGHTER',  'THERE', 'THREE', 'TIGER', 
+      'LITER',  'REEL', 'TREE', 'TREE', 'EIGHT',
+      'RELIGHT', 'ELITE', 'TILE', 'RITE',  'TIRE',
+      'HIRE', 'LEGIT', 'RETILE', 'TIER', 'TITLE', 'LITTER',
+      'THEIR', 'HEEL', 'LETTER', 'LITHE', 'LITHER',
+    ],
+    pangrams: ['LIGHTER', 'RELIGHT'],
+    difficulty: 'Easy',
+    xpReward: DIFFICULTY_CONFIG.Easy.baseXp,
+    coinReward: DIFFICULTY_CONFIG.Easy.baseCoins,
   },
 ];
+
+/** XP progress within the current belt band */
+export const getBeltProgress = (xp: number): { value: number; max: number; beltMin: number } => {
+  let beltMin = 0;
+  let nextMin = BELT_LEVELS[BELT_LEVELS.length - 1].minXp;
+  for (let i = 0; i < BELT_LEVELS.length; i++) {
+    if (xp >= BELT_LEVELS[i].minXp) {
+      beltMin = BELT_LEVELS[i].minXp;
+      nextMin = BELT_LEVELS[i + 1]?.minXp ?? beltMin + 1000;
+    }
+  }
+  return { value: Math.max(0, xp - beltMin), max: Math.max(1, nextMin - beltMin), beltMin };
+};
 
 export const DEFAULT_ACHIEVEMENTS: Achievement[] = [
   {
@@ -147,19 +181,19 @@ export const DEFAULT_ACHIEVEMENTS: Achievement[] = [
     unlocked: false,
     progress: 0,
     target: 1,
-    rewardXp: 10,
-    rewardCoins: 5,
+    rewardXp: 15,
+    rewardCoins: 10,
     iconName: 'Zap',
   },
   {
     id: 'puzzle_master',
     title: 'Scroll Guardian',
-    description: 'Complete 3 full puzzles.',
+    description: 'Complete 5 puzzles.',
     unlocked: false,
     progress: 0,
-    target: 3,
-    rewardXp: 100,
-    rewardCoins: 50,
+    target: 5,
+    rewardXp: 150,
+    rewardCoins: 75,
     iconName: 'Scroll',
   },
   {
@@ -169,8 +203,8 @@ export const DEFAULT_ACHIEVEMENTS: Achievement[] = [
     unlocked: false,
     progress: 1,
     target: 5,
-    rewardXp: 150,
-    rewardCoins: 75,
+    rewardXp: 200,
+    rewardCoins: 100,
     iconName: 'Sparkles',
   },
   {
@@ -180,19 +214,52 @@ export const DEFAULT_ACHIEVEMENTS: Achievement[] = [
     unlocked: false,
     progress: 0,
     target: 5,
-    rewardXp: 50,
-    rewardCoins: 25,
+    rewardXp: 75,
+    rewardCoins: 40,
     iconName: 'Flame',
   },
   {
-    id: 'gold_belter',
+    id: 'jade_belter',
     title: 'Jade Master',
-    description: 'Reach the Green Belt rank.',
+    description: 'Reach the Green Belt rank (2500 XP).',
     unlocked: false,
     progress: 0,
-    target: 600,
+    target: 2500,
+    rewardXp: 250,
+    rewardCoins: 150,
+    iconName: 'Shield',
+  },
+  {
+    id: 'day_devotee',
+    title: 'Seven Forms',
+    description: 'Maintain a 7-day completion streak.',
+    unlocked: false,
+    progress: 0,
+    target: 7,
     rewardXp: 200,
     rewardCoins: 100,
-    iconName: 'Shield',
+    iconName: 'Flame',
+  },
+  {
+    id: 'pangram_hunter',
+    title: 'Pangram Hunter',
+    description: 'Find 10 pangrams across all puzzles.',
+    unlocked: false,
+    progress: 0,
+    target: 10,
+    rewardXp: 150,
+    rewardCoins: 60,
+    iconName: 'Sparkles',
+  },
+  {
+    id: 'perfect_scroll',
+    title: 'Perfect Scroll',
+    description: 'Clear every valid word in a puzzle.',
+    unlocked: false,
+    progress: 0,
+    target: 1,
+    rewardXp: 100,
+    rewardCoins: 50,
+    iconName: 'Trophy',
   },
 ];

@@ -1,57 +1,95 @@
+import {
+  DIFFICULTY_CONFIG,
+  PANGRAM_BONUS_XP,
+  PANGRAM_BONUS_COINS,
+  PERFECT_CLEAR_XP,
+  PERFECT_CLEAR_COINS,
+  DAY_STREAK_XP_PER,
+  DAY_STREAK_COINS_PER,
+  DAY_STREAK_BONUS_CAP,
+  HINT_XP_PENALTY_PERCENT,
+  getStarTier,
+  type PuzzleDifficulty,
+} from '../constants/rewards';
+
 export interface RewardCalculation {
   xp: number;
   coins: number;
+  baseXp: number;
+  baseCoins: number;
   pangramBonus: number;
+  pangramCoins: number;
+  perfectBonus: number;
+  perfectCoins: number;
   streakBonus: number;
+  streakCoins: number;
   characterBonus: number;
+  characterCoins: number;
+  hintPenalty: number;
   achievement?: string;
 }
 
 interface RewardInput {
-  difficulty: "Easy" | "Medium" | "Hard" | "Expert";
+  difficulty: PuzzleDifficulty;
   pangramsFound: number;
-  streak: number;
-  characterMultiplier: number;
+  dayStreak: number;
+  cardStars: number;
+  hintsUsed: number;
+  isPerfect: boolean;
 }
-
-const BASE_REWARDS = {
-  Easy: { xp: 100, coins: 50 },
-  Medium: { xp: 175, coins: 100 },
-  Hard: { xp: 300, coins: 175 },
-  Expert: { xp: 450, coins: 275 },
-};
 
 export const calculateRewards = ({
   difficulty,
   pangramsFound,
-  streak,
-  characterMultiplier,
+  dayStreak,
+  cardStars,
+  hintsUsed,
+  isPerfect,
 }: RewardInput): RewardCalculation => {
-  const base = BASE_REWARDS[difficulty];
+  const fixed = DIFFICULTY_CONFIG[difficulty];
+  const tier = getStarTier(cardStars || 1);
 
-  const pangramBonus = pangramsFound * 75;
-  const streakBonus = streak * 10;
-  const characterBonus = Math.round(base.xp * characterMultiplier);
+  const baseXp = fixed.baseXp;
+  const baseCoins = fixed.baseCoins;
+  const pangramBonus = pangramsFound * PANGRAM_BONUS_XP;
+  const pangramCoins = pangramsFound * PANGRAM_BONUS_COINS;
+  const perfectBonus = isPerfect ? PERFECT_CLEAR_XP : 0;
+  const perfectCoins = isPerfect ? PERFECT_CLEAR_COINS : 0;
+  const streakDays = Math.min(Math.max(dayStreak, 0), DAY_STREAK_BONUS_CAP);
+  const streakBonus = streakDays * DAY_STREAK_XP_PER;
+  const streakCoins = streakDays * DAY_STREAK_COINS_PER;
+  const characterBonus = Math.round(baseXp * tier.xpBonus);
+  const characterCoins = Math.round(baseCoins * tier.coinBonus);
 
-  const xp =
-    base.xp +
-    pangramBonus +
-    streakBonus +
-    characterBonus;
+  let xp =
+    baseXp + pangramBonus + perfectBonus + streakBonus + characterBonus;
+  const hintPenalty =
+    hintsUsed > 0 ? Math.round(xp * (HINT_XP_PENALTY_PERCENT / 100)) : 0;
+  xp = Math.max(0, xp - hintPenalty);
+
+  const coins = baseCoins + pangramCoins + perfectCoins + streakCoins + characterCoins;
 
   const achievement =
-    streak >= 30
-      ? "30 Day Streak"
+    dayStreak >= 30
+      ? '30 Day Streak'
       : pangramsFound > 0
-      ? "Pangram Hunter"
-      : undefined;
+        ? 'Pangram Hunter'
+        : undefined;
 
   return {
     xp,
-    coins: base.coins,
+    coins,
+    baseXp,
+    baseCoins,
     pangramBonus,
+    pangramCoins,
+    perfectBonus,
+    perfectCoins,
     streakBonus,
+    streakCoins,
     characterBonus,
+    characterCoins,
+    hintPenalty,
     achievement,
   };
 };
