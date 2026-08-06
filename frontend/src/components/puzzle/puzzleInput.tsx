@@ -108,8 +108,58 @@ export const PuzzleInput = forwardRef<PuzzleInputHandle, PuzzleInputProps>(
     }, [puzzle.currentWord]);
     const atMaxLength = puzzle.currentWord.length >= MAX_WORD_INPUT_LENGTH;
 
+    // #region agent log
+    if (atMaxLength || disabled) {
+      fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Session-Id': '156feb',
+        },
+        body: JSON.stringify({
+          sessionId: '156feb',
+          runId: 'post-fix',
+          hypothesisId: 'H1',
+          location: 'puzzleInput.tsx:wheelProps',
+          message: 'wheel props after fix (no conflation)',
+          data: {
+            wordLen: puzzle.currentWord.length,
+            max: MAX_WORD_INPUT_LENGTH,
+            atMaxLength,
+            puzzleDisabledProp: disabled,
+            completed: puzzle.completed,
+            locked: puzzle.locked,
+            wheelDisabledOnlyWhenCompleted: disabled,
+            maxLengthProp: atMaxLength && !disabled,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+    // #endregion
+
     const handleLetterClick = (letter: string) => {
-      if (disabled || atMaxLength) return;
+      if (disabled || atMaxLength) {
+        // #region agent log
+        fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Debug-Session-Id': '156feb',
+          },
+          body: JSON.stringify({
+            sessionId: '156feb',
+            runId: 'post-fix',
+            hypothesisId: 'H1',
+            location: 'puzzleInput.tsx:handleLetterClick-blocked',
+            message: 'letter click blocked',
+            data: { letter, disabled, atMaxLength, completed: puzzle.completed },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        return;
+      }
       showFeedback(null);
       dispatch(selectLetter(letter));
     };
@@ -205,7 +255,9 @@ export const PuzzleInput = forwardRef<PuzzleInputHandle, PuzzleInputProps>(
             </p>
           </div>
           {atMaxLength && !disabled && (
-            <p className="mt-2 text-[11px] text-amber-300">Max length reached</p>
+            <p className="mt-2 text-[11px] text-amber-300">
+              Word length exceeded allowed word length
+            </p>
           )}
         </div>
 
@@ -213,7 +265,8 @@ export const PuzzleInput = forwardRef<PuzzleInputHandle, PuzzleInputProps>(
           centerLetter={puzzle.centerLetter}
           outerLetters={puzzle.outerLetters}
           onLetterSelect={handleLetterClick}
-          disabled={disabled || atMaxLength}
+          disabled={disabled}
+          maxLengthReached={atMaxLength && !disabled}
         />
 
         <div className="flex flex-wrap justify-center gap-3">
