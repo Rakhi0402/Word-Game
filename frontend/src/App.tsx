@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from './store';
+import { fetchCurrentUser } from './store/authSlice';
 import { hydrateSession } from './store/session';
 import { assetPreloader } from './utils/preloader';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
@@ -21,8 +22,7 @@ export const App: React.FC = () => {
   const [loadingPercent, setLoadingPercent] = useState(0);
   const [preloadingComplete, setPreloadingComplete] = useState(false);
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
-  const email = useAppSelector((state) => state.auth.email);
-  const username = useAppSelector((state) => state.auth.username);
+  const accessToken = useAppSelector((state) => state.auth.accessToken);
 
   useEffect(() => {
     const startPreloading = async () => {
@@ -41,10 +41,11 @@ export const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated && email && username) {
-      void hydrateSession(dispatch, { email, username });
+    if (isAuthenticated && accessToken) {
+      void dispatch(fetchCurrentUser());
+      void hydrateSession(dispatch);
     }
-  }, [dispatch, isAuthenticated, email, username]);
+  }, [dispatch, isAuthenticated, accessToken]);
 
   if (!preloadingComplete) {
     return <LoadingSpinner progress={loadingPercent} />;

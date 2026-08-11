@@ -1,85 +1,60 @@
 import type { AppDispatch, RootState } from './index';
 import { logout } from './authSlice';
-import { replaceUser, setUserProfile, resetUser, setCharacterMultiplier } from './userSlice';
-import {
-  replaceCards,
-  resetCards,
-  getHintCapacity,
-  getCharacterMultiplier,
-  type CardsState,
-} from './cardsSlice';
-import { resetAchievements, setAchievements } from './achievementsSlice';
-import { resetLeaderboard, updateUserScore } from './leaderboardSlice';
+import { resetUser } from './userSlice';
+import { resetCards } from './cardsSlice';
+import { resetAchievements } from './achievementsSlice';
+import { resetLeaderboard } from './leaderboardSlice';
 import { resetPuzzleState } from './puzzleSlice';
-import { resetSettings } from './settingsSlice';
-import {
-  clearDailyCompletion,
-  clearProgress,
-  defaultProgress,
-  loadProgress,
-  saveProgressFromState,
-  todayKey,
-} from '../utils/mockProgress';
+import { clearDashboard, fetchDashboard } from './dashboardSlice';
+import { clearProfile, fetchProfile } from './profileSlice';
+import { settingsService } from '../services/settingsService';
 
-const applyProgress = (dispatch: AppDispatch, progress: ReturnType<typeof loadProgress>) => {
-  const equipped = progress.equippedCardId;
-  const multiplier = getCharacterMultiplier(equipped);
-  dispatch(replaceUser({ ...progress.user, characterMultiplier: multiplier }));
-  const cardsPayload: CardsState = {
-    unlockedCardIds: progress.unlockedCardIds,
-    inventory: progress.inventory,
-    equippedCardId: equipped,
-    availableHints: progress.availableHints || getHintCapacity(equipped),
-    usedHints: progress.usedHints || 0,
-    paidHintsUsedThisPuzzle: 0,
-    rarityFilter: 'all',
-    equippedCardExpiresAt: null,
-    hintsDayKey: todayKey(),
-  };
-  dispatch(replaceCards(cardsPayload));
-  dispatch(setCharacterMultiplier(multiplier));
-  dispatch(setAchievements(progress.achievements));
-  dispatch(resetLeaderboard(undefined));
-  if (progress.user.username && progress.leaderboardScore > 0) {
-    dispatch(
-      updateUserScore({
-        username: progress.user.username,
-        score: progress.leaderboardScore,
-        belt: progress.user.belt,
-      })
-    );
+/** Clear obsolete local game-state keys so they cannot override the server. */
+export const clearLegacyGameStorage = () => {
+  try {
+    const keys = Object.keys(localStorage);
+    for (const key of keys) {
+      if (
+        key === 'kungfu_user' ||
+        key === 'kungfu_cards' ||
+        key === 'kungfu_achievements' ||
+        key === 'kungfu_leaderboard' ||
+        key.startsWith('kungfu_progress_') ||
+        key.startsWith('kungfu_daily_done_') ||
+        key.startsWith('kungfu_puzzle_cleared_')
+      ) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    /* ignore */
   }
 };
 
-export const clearSession = async (dispatch: AppDispatch, getState: () => RootState) => {
-  const state = getState();
-  const email = state.auth.email || state.user.email;
-  if (email) saveProgressFromState(email, state);
+/**
+ * Load authoritative game state from the backend into Redux caches.
+ */
+export const hydrateSession = async (dispatch: AppDispatch, _identity?: { email: string; username: string }) => {
+  clearLegacyGameStorage();
+  await dispatch(fetchDashboard());
+};
+
+export const clearSession = async (dispatch: AppDispatch, _getState?: () => RootState) => {
   dispatch(logout(undefined));
   dispatch(resetPuzzleState(undefined));
+  dispatch(clearDashboard());
+  dispatch(clearProfile());
+  dispatch(resetUser(undefined));
+  dispatch(resetCards(undefined));
+  dispatch(resetAchievements(undefined));
+  dispatch(resetLeaderboard(undefined));
+  clearLegacyGameStorage();
 };
 
-export const hydrateSession = async (
-  dispatch: AppDispatch,
-  identity: { email: string; username: string }
-) => {
-  const progress = loadProgress(identity.email, identity.username);
-  applyProgress(dispatch, progress);
-  dispatch(setUserProfile({ username: identity.username, email: identity.email }));
-};
-
-export const resetProgression = async (dispatch: AppDispatch, getState: () => RootState) => {
-  const state = getState();
-  const email = state.auth.email || state.user.email;
-  const username = state.auth.username || state.user.username || 'Young Panda';
-  if (email) {
-    clearProgress(email);
-    clearDailyCompletion(email);
-  }
-  const fresh = defaultProgress(username, email || '');
-  applyProgress(dispatch, fresh);
+export const resetProgression = async (dispatch: AppDispatch) => {
+  await settingsService.resetProgression();
+  await Promise.all([dispatch(fetchDashboard()), dispatch(fetchProfile())]);
   dispatch(resetPuzzleState(undefined));
-  dispatch(resetSettings(undefined));
 };
 
 export const factoryResetLocal = (dispatch: AppDispatch) => {
@@ -88,4 +63,7 @@ export const factoryResetLocal = (dispatch: AppDispatch) => {
   dispatch(resetAchievements(undefined));
   dispatch(resetLeaderboard(undefined));
   dispatch(resetPuzzleState(undefined));
+  dispatch(clearDashboard());
+  dispatch(clearProfile());
+  clearLegacyGameStorage();
 };

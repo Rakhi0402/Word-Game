@@ -1,63 +1,88 @@
-# Word Game
+# Word Game (Kung Fu Word Quest)
 
-A polished word-puzzle game frontend built with React, TypeScript, Vite, Redux Toolkit, and Tailwind CSS.
+Production-oriented word puzzle app: React SPA + Spring Boot API, **Supabase PostgreSQL**, **Redis** (local/Docker), and **GCS** for media binaries only.
 
-## Features
+## Architecture
 
-- Word puzzle gameplay with letter-wheel input
-- Card collection and reward systems
-- Profile, leaderboard, and achievements views
-- Dark/light theme support
-- Local persistence for game state and user progress
+| Component | Where |
+|-----------|--------|
+| API | Application server (Docker) |
+| SPA | nginx on same server |
+| PostgreSQL | **Supabase** (managed) — not localhost |
+| Redis | Docker on the server / `docker compose` for local Redis |
+| Images / audio | Google Cloud Storage |
 
-## Project Structure
+## Local development
 
-- frontend/ — React application source code
-- PRD.md — product requirements document
-- FRONTEND_ARCHITECTURE.md — frontend architecture notes
-- BACKEND_ARCHITECTURE.md — proposed backend architecture plan
-
-## Prerequisites
-
-- Node.js 18+ 
-- npm 9+
-
-## Installation
+### 1. Redis only
 
 ```bash
-cd frontend
-npm install
+cd backend
+docker compose up -d
 ```
 
-## Development
+This starts **Redis only**. Postgres stays on Supabase.
 
-Start the development server:
+### 2. Backend
+
+```bash
+cd backend
+cp .env.example .env   # already points at Supabase
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+```
+
+API: `http://localhost:8080` — health: `/actuator/health`
+
+### 3. Frontend
 
 ```bash
 cd frontend
+cp .env.example .env.development
+npm install
 npm run dev
 ```
 
-Then open the local URL shown in the terminal.
+Vite proxies `/api` → `http://localhost:8080`.
 
-## Build
+## Environment
 
-Create a production build:
+**Backend**
+
+- `SPRING_DATASOURCE_URL` / `USERNAME` / `PASSWORD` — Supabase pooler
+- `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD`
+- `JWT_SECRET`
+- `APP_CORS_ORIGINS`
+- `APP_ASSET_BASE_URL` — GCS base, e.g. `https://storage.googleapis.com/kungfu-word-quest-assets`
+
+**Frontend**
+
+- `VITE_API_BASE_URL` — empty in prod (same-origin `/api` via nginx); optional absolute URL in special setups
+- `VITE_ASSET_BASE_URL` — same GCS base as backend
+
+## Media (GCS)
+
+Place files under `media/{backgrounds,cards,audio,ui}` then:
 
 ```bash
-cd frontend
-npm run build
+./scripts/sync-media-to-gcs.sh kungfu-word-quest-assets
 ```
 
-## Lint
+Configure bucket CORS for canvas (`crossOrigin=anonymous`). See script output.
 
-Run the linter:
+## Production
 
 ```bash
-cd frontend
-npm run lint
+cd frontend && npm ci && npm run build && cd ..
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-## Notes
+- nginx serves SPA and proxies `/api` → API
+- API uses Supabase + Redis container
+- Backups: `./scripts/backup-supabase.sh` (cron)
+- CI example: `.github/workflows/deploy.yml`
 
-The current frontend uses mock/local storage-based authentication and persistence, which is suitable for development and prototyping.
+## Auth & gameplay
+
+- Register / login against `/api/v1/auth/*` (JWT access + refresh)
+- Daily puzzle never returns `validWords` to the client
+- Progress (XP, coins, cards, achievements, leaderboard) is server-authoritative

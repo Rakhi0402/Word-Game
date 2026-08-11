@@ -1,12 +1,11 @@
 import { useCallback } from 'react';
 import { useAppDispatch, useAppSelector } from '../store';
-import {
-  consumeFreeHint,
-  recordPaidHint,
-} from '../store/cardsSlice';
-import { deductCoins, incrementHintsBought, incrementHintsUsed } from '../store/userSlice';
-import { revealHint } from '../store/puzzleSlice';
+import { consumeFreeHint, recordPaidHint } from '../store/cardsSlice';
+import { puzzleService } from '../services/puzzleService';
+import { fetchDashboard } from '../store/dashboardSlice';
+import { revealHintWord } from '../store/puzzleSlice';
 import { HINT_COST_COINS, MAX_PAID_HINTS_PER_PUZZLE } from '../constants/rewards';
+import { ApiClientError } from '../types/auth';
 
 const usePuzzleHints = () => {
   const dispatch = useAppDispatch();
@@ -17,40 +16,24 @@ const usePuzzleHints = () => {
   const freeRemaining = Math.max(0, cards.availableHints - cards.usedHints);
   const paidUsed = cards.paidHintsUsedThisPuzzle;
   const canPay = user.coins >= HINT_COST_COINS && paidUsed < MAX_PAID_HINTS_PER_PUZZLE;
-  const canHint = !puzzle.completed && (freeRemaining > 0 || canPay);
+  const canHint = !puzzle.completed && Boolean(puzzle.activePuzzleId) && (freeRemaining > 0 || canPay);
 
-  const handleRevealHint = useCallback(() => {
-    if (puzzle.completed) return;
+  const handleRevealHint = useCallback(async () => {
+    if (puzzle.completed || !puzzle.activePuzzleId) return;
 
-    const remainingWords = puzzle.validWords.filter(
-      (w) =>
-        !puzzle.wordsFound.some((f) => f.text === w) && !puzzle.hintedWords.includes(w)
-    );
-    if (remainingWords.length === 0) return;
-
-    if (freeRemaining > 0) {
-      dispatch(consumeFreeHint(undefined));
-      dispatch(revealHint(undefined));
-      dispatch(incrementHintsUsed(undefined));
-      return;
+    try {
+      const hint = await puzzleService.revealHint(puzzle.activePuzzleId);
+      if (freeRemaining > 0) {
+        dispatch(consumeFreeHint(undefined));
+      } else {
+        dispatch(recordPaidHint(undefined));
+      }
+      dispatch(revealHintWord(hint));
+      void dispatch(fetchDashboard());
+    } catch (err) {
+      alert(err instanceof ApiClientError ? err.message : 'Hint unavailable.');
     }
-
-    if (canPay) {
-      dispatch(deductCoins(HINT_COST_COINS));
-      dispatch(recordPaidHint(undefined));
-      dispatch(revealHint(undefined));
-      dispatch(incrementHintsUsed(undefined));
-      dispatch(incrementHintsBought(undefined));
-    }
-  }, [
-    dispatch,
-    puzzle.completed,
-    puzzle.validWords,
-    puzzle.wordsFound,
-    puzzle.hintedWords,
-    freeRemaining,
-    canPay,
-  ]);
+  }, [dispatch, puzzle.completed, puzzle.activePuzzleId, freeRemaining]);
 
   return {
     handleRevealHint,

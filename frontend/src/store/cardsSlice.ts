@@ -69,54 +69,24 @@ const fullChargesFor = (cardId: string): number => {
   return getStarTier(card?.stars ?? 1).charges;
 };
 
-const defaultInventory = (): Record<string, CardInventoryEntry> => ({
-  po_common: { chargesRemaining: fullChargesFor('po_common'), status: 'available' },
+/** Empty until dashboard/collection API hydrates — backend owns ownership. */
+const emptyCardsState = (): CardsState => ({
+  unlockedCardIds: [],
+  inventory: {},
+  equippedCardId: null,
+  equippedCardExpiresAt: null,
+  availableHints: getHintCapacity(null),
+  usedHints: 0,
+  paidHintsUsedThisPuzzle: 0,
+  rarityFilter: 'all',
+  hintsDayKey: todayKey(),
 });
 
-const initialState: CardsState = (() => {
-  try {
-    const saved = localStorage.getItem('kungfu_cards');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      const unlocked: string[] = parsed.unlockedCardIds || ['po_common'];
-      const inventory: Record<string, CardInventoryEntry> = parsed.inventory || {};
-      unlocked.forEach((id) => {
-        if (!inventory[id]) {
-          inventory[id] = { chargesRemaining: fullChargesFor(id), status: 'available' };
-        }
-      });
-      const equipped = parsed.equippedCardId;
-      const validEquip =
-        equipped && inventory[equipped]?.status === 'available' ? equipped : unlocked[0] || null;
-      return {
-        unlockedCardIds: unlocked,
-        inventory,
-        equippedCardId: validEquip,
-        equippedCardExpiresAt: parsed.equippedCardExpiresAt || null,
-        availableHints: parsed.availableHints ?? getHintCapacity(validEquip),
-        usedHints: parsed.usedHints || 0,
-        paidHintsUsedThisPuzzle: parsed.paidHintsUsedThisPuzzle || 0,
-        rarityFilter: parsed.rarityFilter || 'all',
-        hintsDayKey: parsed.hintsDayKey || null,
-      };
-    }
-  } catch (error) {
-    void error;
-  }
-  return {
-    unlockedCardIds: ['po_common'],
-    inventory: defaultInventory(),
-    equippedCardId: 'po_common',
-    equippedCardExpiresAt: null,
-    availableHints: getHintCapacity('po_common'),
-    usedHints: 0,
-    paidHintsUsedThisPuzzle: 0,
-    rarityFilter: 'all' as const,
-    hintsDayKey: todayKey(),
-  };
-})();
+const initialState: CardsState = emptyCardsState();
 
-const persist = (state: CardsState) => localStorage.setItem('kungfu_cards', JSON.stringify(state));
+const persist = (_state: CardsState) => {
+  /* Server is source of truth for card inventory. */
+};
 
 const cardsSlice = createSlice({
   name: 'cards',
@@ -246,17 +216,7 @@ const cardsSlice = createSlice({
       persist(state);
     },
     resetCards() {
-      const next: CardsState = {
-        unlockedCardIds: ['po_common'],
-        inventory: defaultInventory(),
-        equippedCardId: 'po_common',
-        equippedCardExpiresAt: null,
-        availableHints: getHintCapacity('po_common'),
-        usedHints: 0,
-        paidHintsUsedThisPuzzle: 0,
-        rarityFilter: 'all',
-        hintsDayKey: todayKey(),
-      };
+      const next = emptyCardsState();
       persist(next);
       return next;
     },

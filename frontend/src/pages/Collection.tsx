@@ -1,33 +1,25 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store';
 import {
-  unlockCard,
-  equipCard,
   setRarityFilter,
   getCharacterMultiplier,
+  replaceCards,
 } from '../store/cardsSlice';
-import {
-  addCoins,
-  deductCoins,
-  incrementCardsCount,
-  setCharacterMultiplier,
-  addStreakShields,
-  consumeFreeChestToken,
-} from '../store/userSlice';
-import { evaluateAchievements } from '../store/achievementsSlice';
+import { setCharacterMultiplier } from '../store/userSlice';
+import { fetchDashboard } from '../store/dashboardSlice';
+import { mapCollectionToCards } from '../store/mapCollection';
 import { Button } from '../components/ui/Button';
 import { Tabs } from '../components/ui/Tabs';
 import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
 import { CanvasCard } from '../components/cards/CanvasCard';
 import { CHARACTER_CARDS } from '../constants';
-import { CHEST_DRAW_COST, getStarTier } from '../constants/rewards';
+import { CHEST_DRAW_COST } from '../constants/rewards';
 import type { CharacterCard, RarityType } from '../types';
 import { cardService } from '../services/cardService';
 import { playSound } from '../utils/audio';
 import { Lock, Sparkles, Share2, Coins, HelpCircle } from 'lucide-react';
-import { store } from '../store';
-import { saveProgressFromState } from '../utils/mockProgress';
+import { ApiClientError } from '../types/auth';
 
 type DrawResult = {
   card: CharacterCard;
@@ -35,6 +27,27 @@ type DrawResult = {
   isExhaustedRestore: boolean;
   refundAmount: number;
   usedFreeToken: boolean;
+};
+
+const mapCard = (c: {
+  id: string;
+  name: string;
+  rarity: string;
+  image: string;
+  stars: number;
+  bonuses?: string[];
+  description?: string;
+}): CharacterCard => {
+  const local = CHARACTER_CARDS.find((x) => x.id === c.id);
+  return {
+    id: c.id,
+    name: c.name || local?.name || c.id,
+    rarity: (c.rarity as RarityType) || local?.rarity || 'common',
+    image: local?.image || c.image || '',
+    stars: c.stars ?? local?.stars ?? 1,
+    bonuses: c.bonuses || local?.bonuses || [],
+    description: c.description || local?.description || '',
+  };
 };
 
 export const Collection: React.FC = () => {
@@ -48,6 +61,28 @@ export const Collection: React.FC = () => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawResult, setDrawResult] = useState<DrawResult | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadCollection = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const collection = await cardService.getCollection();
+      dispatch(replaceCards(mapCollectionToCards(collection)));
+      if (collection.equippedCardId) {
+        dispatch(setCharacterMultiplier(getCharacterMultiplier(collection.equippedCardId)));
+      }
+    } catch (err) {
+      setLoadError(err instanceof ApiClientError ? err.message : 'Could not load collection.');
+    } finally {
+      setLoading(false);
+    }
+  }, [dispatch]);
+
+  useEffect(() => {
+    void loadCollection();
+  }, [loadCollection]);
 
   const filterOptions = [
     { id: 'all', label: 'All Scrolls' },
@@ -62,15 +97,6 @@ export const Collection: React.FC = () => {
     return card.rarity === cards.rarityFilter;
   });
 
-  const exhaustedIds = cards.unlockedCardIds.filter(
-    (id) => cards.inventory[id]?.status === 'exhausted'
-  );
-
-  const persist = () => {
-    const email = store.getState().auth.email || user.email;
-    if (email) queueMicrotask(() => saveProgressFromState(email, store.getState()));
-  };
-
   const handleDrawCard = async () => {
     const useToken = user.freeChestTokens > 0;
     if (!useToken && user.coins < CHEST_DRAW_COST) {
@@ -82,36 +108,20 @@ export const Collection: React.FC = () => {
     setIsDrawing(true);
     playSound.success(soundEnabled);
 
-    const res = await cardService.drawRandomCard(cards.unlockedCardIds, exhaustedIds);
-
-    if (res.success && res.data) {
-      const pulled = res.data.card;
-      if (useToken) {
-        dispatch(consumeFreeChestToken(undefined));
-      } else {
-        dispatch(deductCoins(CHEST_DRAW_COST));
-      }
-
-      if (res.data.isExhaustedRestore) {
-        dispatch(unlockCard({ cardId: pulled.id, restoreCharges: true }));
-      } else if (res.data.isDuplicate) {
-        dispatch(addCoins(res.data.refundAmount));
-      } else {
-        dispatch(unlockCard({ cardId: pulled.id }));
-        dispatch(incrementCardsCount(undefined));
-        dispatch(
-          evaluateAchievements({
-            stats: {
-              ...user.stats,
-              cardsCollected: user.stats.cardsCollected + 1,
-            },
-            xp: user.xp,
-          })
-        );
-      }
-
-      setDrawResult({ ...res.data, usedFreeToken: useToken });
-      persist();
+    try {
+      const result = await cardService.drawCard();
+      const pulled = mapCard(result.card);
+      setDrawResult({
+        card: pulled,
+        isDuplicate: result.duplicate,
+        isExhaustedRestore: Boolean(result.exhaustedRestore),
+        refundAmount: result.refundAmount,
+        usedFreeToken: Boolean(result.usedFreeToken ?? useToken),
+      });
+      await Promise.all([loadCollection(), dispatch(fetchDashboard())]);
+    } catch (err) {
+      playSound.failure(soundEnabled);
+      alert(err instanceof ApiClientError ? err.message : 'Draw failed.');
     }
     setIsDrawing(false);
   };
@@ -129,18 +139,21 @@ export const Collection: React.FC = () => {
     }
   };
 
-  const handleEquip = (cardId: string) => {
+  const handleEquip = async (cardId: string) => {
     const entry = cards.inventory[cardId];
     if (!entry || entry.status !== 'available') {
       playSound.failure(soundEnabled);
       return;
     }
-    const card = CHARACTER_CARDS.find((c) => c.id === cardId);
-    const shields = card ? getStarTier(card.stars).streakShieldsOnEquip : 0;
-    dispatch(equipCard(cardId));
-    dispatch(setCharacterMultiplier(getCharacterMultiplier(cardId)));
-    if (shields > 0) dispatch(addStreakShields(shields));
-    persist();
+    try {
+      const collection = await cardService.equipCard(cardId);
+      dispatch(replaceCards(mapCollectionToCards(collection)));
+      dispatch(setCharacterMultiplier(getCharacterMultiplier(cardId)));
+      await dispatch(fetchDashboard());
+    } catch (err) {
+      playSound.failure(soundEnabled);
+      alert(err instanceof ApiClientError ? err.message : 'Could not equip card.');
+    }
   };
 
   const isUnlocked = (cardId: string) => cards.unlockedCardIds.includes(cardId);
@@ -149,6 +162,25 @@ export const Collection: React.FC = () => {
   const chargesOf = (cardId: string) => cards.inventory[cardId]?.chargesRemaining ?? 0;
 
   const canAffordChest = user.freeChestTokens > 0 || user.coins >= CHEST_DRAW_COST;
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-sm text-parchment/70">
+        Loading scroll collection…
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-4 p-6 text-center">
+        <p className="text-sm text-red-300">{loadError}</p>
+        <Button variant="primary" onClick={() => void loadCollection()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

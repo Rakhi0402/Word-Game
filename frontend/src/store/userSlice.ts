@@ -59,15 +59,7 @@ const migrateUser = (raw: Partial<User>): User => ({
   choicePuzzlesCompletedToday: raw.choicePuzzlesCompletedToday ?? 0,
 });
 
-const initialState: User = (() => {
-  try {
-    const saved = localStorage.getItem('kungfu_user');
-    if (saved) return migrateUser(JSON.parse(saved));
-  } catch (error) {
-    void error;
-  }
-  return defaultUser;
-})();
+const initialState: User = defaultUser;
 
 export const evaluateBelt = (xp: number): { belt: BeltColor; rank: string; xpNeeded: number } => {
   let activeBelt = BELT_PROGRESSION[0];
@@ -80,7 +72,9 @@ export const evaluateBelt = (xp: number): { belt: BeltColor; rank: string; xpNee
   return { belt: activeBelt.belt, rank: activeBelt.title, xpNeeded: nextBelt.minXp };
 };
 
-const persist = (state: User) => localStorage.setItem('kungfu_user', JSON.stringify(state));
+const persist = (_state: User) => {
+  /* Game progression is server-authoritative; do not persist to localStorage. */
+};
 
 export interface BeltUpResult {
   belt: BeltColor;

@@ -9,15 +9,9 @@ interface AchievementsState {
   achievements: Achievement[];
 }
 
-const initialState: AchievementsState = (() => {
-  try {
-    const saved = localStorage.getItem('kungfu_achievements');
-    if (saved) return JSON.parse(saved);
-  } catch (error) {
-    void error;
-  }
-  return { achievements: DEFAULT_ACHIEVEMENTS.map((a) => ({ ...a })) };
-})();
+const initialState: AchievementsState = {
+  achievements: DEFAULT_ACHIEVEMENTS.map((a) => ({ ...a })),
+};
 
 const achievementsSlice = createSlice({
   name: 'achievements',
@@ -25,11 +19,9 @@ const achievementsSlice = createSlice({
   reducers: {
     setAchievements(state, action: PayloadAction<Achievement[]>) {
       state.achievements = action.payload;
-      localStorage.setItem('kungfu_achievements', JSON.stringify(state));
     },
     resetAchievements(state) {
       state.achievements = DEFAULT_ACHIEVEMENTS.map((a) => ({ ...a }));
-      localStorage.setItem('kungfu_achievements', JSON.stringify(state));
     },
   },
 });

@@ -1,8 +1,8 @@
 import { useCallback, useRef } from 'react';
 import { useAppDispatch, useAppSelector } from '../store';
 import { submitWordSuccess, submitWordFailure } from '../store/puzzleSlice';
-import { getScoreBonus } from '../store/cardsSlice';
 import { puzzleService } from '../services/puzzleService';
+import { ApiClientError } from '../types/auth';
 
 const REASON_MESSAGES: Record<string, string> = {
   too_short: 'Too short (min 4 letters)',
@@ -15,7 +15,6 @@ const REASON_MESSAGES: Record<string, string> = {
 const usePuzzleSubmission = () => {
   const dispatch = useAppDispatch();
   const puzzle = useAppSelector((state) => state.puzzle);
-  const equippedCardId = useAppSelector((state) => state.cards.equippedCardId);
   const submittingRef = useRef(false);
 
   const handleSubmit = useCallback(async (): Promise<string | false> => {
@@ -40,7 +39,7 @@ const usePuzzleSubmission = () => {
       }
 
       if (!response.data.valid) {
-        const reason = response.data.reason || 'not_in_dict';
+        const reason = response.data.reason || (response.data.duplicate ? 'duplicate' : 'not_in_dict');
         dispatch(
           submitWordFailure({
             retainStreak: reason === 'duplicate',
@@ -51,18 +50,26 @@ const usePuzzleSubmission = () => {
         return REASON_MESSAGES[reason] || 'Invalid Word';
       }
 
-      const scoreBonusPercent = getScoreBonus(equippedCardId);
+      // Points come from the server — do not apply client card score bonus on top.
       dispatch(
         submitWordSuccess({
           text: word,
           score: response.data.points,
           isPangram: response.data.isPangram ?? false,
-          scoreBonusPercent,
+          scoreBonusPercent: 0,
+          serverCompleted: Boolean(response.data.completed),
+          xpAwarded: response.data.xpAwarded ?? 0,
+          coinsAwarded: response.data.coinsAwarded ?? 0,
         })
       );
 
-      // Profile XP / coins / wordsFound apply only on puzzle completion.
       return 'valid';
+    } catch (err) {
+      dispatch(submitWordFailure({ retainStreak: false, reason: 'invalid', word: puzzle.currentWord }));
+      if (err instanceof ApiClientError) {
+        return err.message || 'Invalid Word';
+      }
+      return 'Invalid Word';
     } finally {
       submittingRef.current = false;
     }
@@ -72,8 +79,6 @@ const usePuzzleSubmission = () => {
     puzzle.currentWord,
     puzzle.wordsFound,
     puzzle.completed,
-    puzzle.score,
-    equippedCardId,
   ]);
 
   return { handleSubmit };

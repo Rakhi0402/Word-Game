@@ -28,7 +28,7 @@ export const FoundWords: React.FC = () => {
             Found Words
           </h2>
           <p className="text-sm text-jade dark:text-white/70">
-            {puzzle.wordsFound.length} of {puzzle.totalValidWords} words found
+            {puzzle.wordsFound.length} of {puzzle.requiredWordsToComplete} words found
           </p>
         </div>
         <div className=" items-center gap-2 rounded-lg border border-gold px-3 py-2 bg-parchment/20 text-gold flex">

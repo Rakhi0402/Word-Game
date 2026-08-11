@@ -85,9 +85,33 @@ export interface DailyPuzzle {
   id: string;
   letters: string[];
   centerLetter: string;
-  validWords: string[];
+  /** Never authoritative from API — kept optional for legacy UI that counted totals. */
+  validWords?: string[];
   pangrams?: string[];
+  /** Count of pangrams in the puzzle (from API; not the words). */
+  pangramCount?: number;
   difficulty: PuzzleDifficulty;
   xpReward: number;
   coinReward: number;
+  targetWordCount?: number;
+  minimumWordLength?: number;
+  scheduledDate?: string | null;
+  daily?: boolean;
+  /** Hydrated from server progress when available */
+  completed?: boolean;
+  foundWords?: string[];
+  score?: number;
+  streak?: number;
+  hintsUsed?: number;
+  status?: string;
+}
+
+/**
+ * Client-only UI preferences (Settings page).
+ * Not persisted on the backend — stored in localStorage key `kungfu_settings`.
+ * Account identity and progression come from AuthUser / dashboard APIs.
+ */
+export interface UiPreferences {
+  darkMode: boolean;
+  sound: boolean;
 }

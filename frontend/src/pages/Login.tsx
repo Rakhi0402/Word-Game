@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAppDispatch } from '../store';
-import { loginSuccess } from '../store/authSlice';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAppDispatch, useAppSelector } from '../store';
+import { clearAuthError, loginUser } from '../store/authSlice';
 import { hydrateSession } from '../store/session';
-import { authService } from '../services/authService';
+import { validateLoginForm } from '../constants/authValidation';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Mail, Lock, ShieldAlert } from 'lucide-react';
@@ -11,35 +11,56 @@ import { Mail, Lock, ShieldAlert } from 'lucide-react';
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    userEmail?: string;
+    password?: string;
+  }>({});
 
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
+  const loading = useAppSelector((s) => s.auth.loading);
+  const authError = useAppSelector((s) => s.auth.error);
+
+  const registeredState = location.state as { registered?: boolean; email?: string } | null;
+  const from = (location.state as { from?: string } | null)?.from || '/home';
+
+  React.useEffect(() => {
+    dispatch(clearAuthError());
+  }, [dispatch]);
+
+  React.useEffect(() => {
+    if (registeredState?.email) setEmail(registeredState.email);
+  }, [registeredState?.email]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
+    dispatch(clearAuthError());
+    setFieldErrors({});
 
-    const res = await authService.login(email, password);
+    const client = validateLoginForm(email, password);
+    if (!client.ok) {
+      setFieldErrors(client.fieldErrors);
+      return;
+    }
 
-    if (res.success && res.data) {
-      dispatch(
-        loginSuccess({
-          email: res.data.email,
-          username: res.data.username,
-          token: res.data.token,
-        })
-      );
-      await hydrateSession(dispatch, {
-        email: res.data.email,
-        username: res.data.username,
-      });
-      navigate('/home');
-    } else {
-      setError(res.message || 'Login failed. Try again.');
-      setLoading(false);
+    const result = await dispatch(
+      loginUser({ userEmail: email.trim().toLowerCase(), password })
+    );
+
+    if (loginUser.fulfilled.match(result)) {
+      await hydrateSession(dispatch);
+      navigate(from, { replace: true });
+    } else if (loginUser.rejected.match(result)) {
+      const payload = result.payload as
+        | { message?: string; fieldErrors?: Record<string, string> }
+        | undefined;
+      if (payload?.fieldErrors) {
+        setFieldErrors({
+          userEmail: payload.fieldErrors.userEmail,
+          password: payload.fieldErrors.password,
+        });
+      }
     }
   };
 
@@ -60,16 +81,25 @@ export const Login: React.FC = () => {
             Academy Entry
           </h3>
 
-          {error && (
-            <div className="mb-4 flex items-center space-x-2 rounded-xl bg-red-950/80 border border-red-500/50 p-3 text-xs text-red-200">
-              <ShieldAlert className="h-4 w-4 shrink-0 text-red-400" />
-              <span>{error}</span>
+          {registeredState?.registered && (
+            <div className="mb-4 rounded-xl border border-green-500/40 bg-green-950/50 p-3 text-xs text-green-200">
+              Registration successful. Sign in with your credentials.
             </div>
           )}
 
-          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+          {authError && (
+            <div className="mb-4 flex items-center space-x-2 rounded-xl bg-red-950/80 border border-red-500/50 p-3 text-xs text-red-200">
+              <ShieldAlert className="h-4 w-4 shrink-0 text-red-400" />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4" noValidate>
             <div>
-              <label htmlFor="login-email" className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5">
+              <label
+                htmlFor="login-email"
+                className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5"
+              >
                 Scroll Address (Email)
               </label>
               <div className="relative">
@@ -79,17 +109,26 @@ export const Login: React.FC = () => {
                 <input
                   id="login-email"
                   type="email"
+                  autoComplete="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setFieldErrors((f) => ({ ...f, userEmail: undefined }));
+                  }}
                   placeholder="name@academy.com"
                   className="w-full rounded-xl border border-gold/30 bg-jade-dark/40 py-2.5 pl-10 pr-4 text-sm text-parchment placeholder-parchment/40 focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold/50"
-                  required
                 />
               </div>
+              {fieldErrors.userEmail && (
+                <p className="mt-1 text-xs text-red-300">{fieldErrors.userEmail}</p>
+              )}
             </div>
 
             <div>
-              <label htmlFor="login-password" className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5">
+              <label
+                htmlFor="login-password"
+                className="block text-xs font-bold uppercase tracking-wider text-gold/80 mb-1.5"
+              >
                 Secret Phrase (Password)
               </label>
               <div className="relative">
@@ -99,24 +138,33 @@ export const Login: React.FC = () => {
                 <input
                   id="login-password"
                   type="password"
+                  autoComplete="current-password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setFieldErrors((f) => ({ ...f, password: undefined }));
+                  }}
                   placeholder="••••••••"
                   className="w-full rounded-xl border border-gold/30 bg-jade-dark/40 py-2.5 pl-10 pr-4 text-sm text-parchment placeholder-parchment/40 focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold/50"
-                  required
                 />
               </div>
+              {fieldErrors.password && (
+                <p className="mt-1 text-xs text-red-300">{fieldErrors.password}</p>
+              )}
             </div>
 
             <Button type="submit" variant="primary" fullWidth disabled={loading} className="mt-6">
-              {loading ? 'Opening Gates...' : 'Enter Dojo'}
+              {loading ? 'Entering...' : 'Enter the Dojo'}
             </Button>
           </form>
 
           <div className="mt-6 text-center text-xs text-parchment/70 border-t border-gold/25 pt-4">
             New disciple?{' '}
-            <Link to="/register" className="font-bold text-gold hover:text-gold-light hover:underline uppercase tracking-wide">
-              Sign up here
+            <Link
+              to="/register"
+              className="font-bold text-gold hover:text-gold-light hover:underline uppercase tracking-wide"
+            >
+              Register here
             </Link>
           </div>
         </Card>

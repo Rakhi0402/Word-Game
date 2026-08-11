@@ -1,6 +1,7 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import type { DailyPuzzle, FoundWord } from '../types';
-import { DIFFICULTY_CONFIG, wordStreakExtra, MAX_WORD_INPUT_LENGTH } from '../constants/rewards';
+import { DIFFICULTY_CONFIG, MAX_WORD_INPUT_LENGTH } from '../constants/rewards';
+import { isPangramFromLetters } from '../utils/pangram';
 
 interface PuzzleState {
   activePuzzleId: string | null;
@@ -20,14 +21,19 @@ interface PuzzleState {
   coinReward: number;
   totalValidWordsCount: number;
   requiredWordsToComplete: number;
+  /** Unused answer-key list (kept empty). Use totalPangrams for UI. */
   pangrams: string[];
   pangramsFound: string[];
+  /** Safe pangram total from API (count only). */
+  totalPangrams: number;
   totalValidWords: number;
   lastRejectedWord: string | null;
   lastRejectedReason: 'duplicate' | 'invalid' | null;
   hintsUsedThisPuzzle: number;
   /** True = featured daily attempt (once/day); false = optional choice puzzle */
   isDailySession: boolean;
+  /** Authoritative rewards from last completing submit (server). */
+  pendingServerRewards: { xp: number; coins: number } | null;
 }
 
 const initialState: PuzzleState = {
@@ -50,11 +56,13 @@ const initialState: PuzzleState = {
   requiredWordsToComplete: 0,
   pangrams: [],
   pangramsFound: [],
+  totalPangrams: 0,
   totalValidWords: 0,
   lastRejectedWord: null,
   lastRejectedReason: null,
   hintsUsedThisPuzzle: 0,
   isDailySession: true,
+  pendingServerRewards: null,
 };
 
 const shuffleArray = (array: string[]) => {
@@ -82,33 +90,43 @@ const puzzleSlice = createSlice({
       state.outerLetters = shuffleArray(outer);
       state.letters = [puzzle.centerLetter, ...state.outerLetters];
       state.currentWord = '';
-      state.validWords = puzzle.validWords;
-      state.wordsFound = [];
+      state.validWords = [];
+      const letterPool = puzzle.letters || [];
+      const found = (puzzle.foundWords || []).map((text) => {
+        const upper = text.toUpperCase();
+        return {
+          text: upper,
+          score: 0,
+          isPangram: isPangramFromLetters(upper, letterPool),
+        };
+      });
+      state.wordsFound = found;
       state.hintedWords = [];
-      state.score = 0;
-      state.streak = 0;
-      state.completed = false;
-      state.locked = false;
+      state.score = puzzle.score ?? 0;
+      state.streak = puzzle.streak ?? 0;
+      state.completed = Boolean(puzzle.completed);
+      state.locked = Boolean(puzzle.completed);
       state.difficulty = puzzle.difficulty;
       state.xpReward = puzzle.xpReward;
       state.coinReward = puzzle.coinReward;
-      state.totalValidWordsCount = puzzle.validWords.length;
-      const target = DIFFICULTY_CONFIG[puzzle.difficulty].targetWords;
-      state.requiredWordsToComplete = Math.max(
-        1,
-        Math.min(Math.max(puzzle.validWords.length, 1), target)
+      const ruleTarget = DIFFICULTY_CONFIG[puzzle.difficulty].targetWords;
+      const target = Math.min(
+        Math.max(1, puzzle.targetWordCount ?? ruleTarget),
+        ruleTarget
       );
-      const derivedPangrams = puzzle.pangrams?.length
-        ? puzzle.pangrams
-        : puzzle.validWords.filter((word) =>
-            puzzle.letters.every((letter) => word.includes(letter))
-          );
-      state.pangrams = derivedPangrams;
-      state.pangramsFound = [];
-      state.totalValidWords = puzzle.validWords.length;
+      state.requiredWordsToComplete = target;
+      state.totalValidWordsCount = target;
+      state.totalValidWords = target;
+      state.pangrams = [];
+      state.totalPangrams = Math.max(0, puzzle.pangramCount ?? 0);
+      state.pangramsFound = found.filter((w) => w.isPangram).map((w) => w.text);
+      // #region agent log
+      fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'post-fix',hypothesisId:'P',location:'puzzleSlice.ts:loadPuzzle',message:'Puzzle UI targets loaded',data:{difficulty:puzzle.difficulty,target,totalPangrams:state.totalPangrams,pangramsFound:state.pangramsFound.length,foundCount:found.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       state.lastRejectedWord = null;
       state.lastRejectedReason = null;
-      state.hintsUsedThisPuzzle = 0;
+      state.hintsUsedThisPuzzle = puzzle.hintsUsed ?? 0;
+      state.pendingServerRewards = null;
     },
     selectLetter: (state, action: PayloadAction<string>) => {
       if (state.completed || state.locked) return;
@@ -134,7 +152,14 @@ const puzzleSlice = createSlice({
     },
     submitWordSuccess: (
       state,
-      action: PayloadAction<FoundWord & { scoreBonusPercent?: number }>
+      action: PayloadAction<
+        FoundWord & {
+          scoreBonusPercent?: number;
+          serverCompleted?: boolean;
+          xpAwarded?: number;
+          coinsAwarded?: number;
+        }
+      >
     ) => {
       state.wordsFound.push({
         text: action.payload.text,
@@ -142,18 +167,20 @@ const puzzleSlice = createSlice({
         isPangram: action.payload.isPangram,
       });
       state.streak += 1;
-      const streakExtra = wordStreakExtra(state.streak);
-      const scoreBonus = action.payload.scoreBonusPercent ?? 0;
-      const raw = action.payload.score + streakExtra;
-      state.score += Math.round(raw * (1 + scoreBonus));
+      // Server points are authoritative (already include streak/card bonuses).
+      state.score += action.payload.score;
       if (action.payload.isPangram) {
         state.pangramsFound.push(action.payload.text);
       }
       state.currentWord = '';
       state.lastRejectedWord = null;
       state.lastRejectedReason = null;
-      if (state.wordsFound.length >= state.requiredWordsToComplete) {
+      if (action.payload.serverCompleted) {
         state.completed = true;
+        state.pendingServerRewards = {
+          xp: action.payload.xpAwarded ?? 0,
+          coins: action.payload.coinsAwarded ?? 0,
+        };
       }
     },
     revealHint: (state) => {
@@ -165,6 +192,13 @@ const puzzleSlice = createSlice({
       if (remaining.length === 0) return;
       const nextHint = remaining[Math.floor(Math.random() * remaining.length)];
       state.hintedWords.push(nextHint);
+      state.hintsUsedThisPuzzle += 1;
+    },
+    revealHintWord: (state, action: PayloadAction<string>) => {
+      const word = action.payload.toUpperCase();
+      if (!state.hintedWords.includes(word)) {
+        state.hintedWords.push(word);
+      }
       state.hintsUsedThisPuzzle += 1;
     },
     submitWordFailure: (
@@ -211,7 +245,7 @@ const puzzleSlice = createSlice({
       state.outerLetters = outer;
       state.letters = [puzzle.centerLetter, ...outer];
       state.currentWord = '';
-      state.validWords = puzzle.validWords;
+      state.validWords = [];
       state.wordsFound = action.payload.wordsFound;
       state.hintedWords = action.payload.hintedWords;
       state.score = action.payload.score;
@@ -221,20 +255,16 @@ const puzzleSlice = createSlice({
       state.difficulty = puzzle.difficulty;
       state.xpReward = puzzle.xpReward;
       state.coinReward = puzzle.coinReward;
-      state.totalValidWordsCount = puzzle.validWords.length;
-      const target = DIFFICULTY_CONFIG[puzzle.difficulty].targetWords;
-      state.requiredWordsToComplete = Math.max(
-        1,
-        Math.min(Math.max(puzzle.validWords.length, 1), target)
+      const target = Math.min(
+        Math.max(1, puzzle.targetWordCount ?? DIFFICULTY_CONFIG[puzzle.difficulty].targetWords),
+        DIFFICULTY_CONFIG[puzzle.difficulty].targetWords
       );
-      const derivedPangrams = puzzle.pangrams?.length
-        ? puzzle.pangrams
-        : puzzle.validWords.filter((word) =>
-            puzzle.letters.every((letter) => word.includes(letter))
-          );
-      state.pangrams = derivedPangrams;
+      state.totalValidWordsCount = target;
+      state.requiredWordsToComplete = target;
+      state.pangrams = [];
+      state.totalPangrams = Math.max(0, puzzle.pangramCount ?? 0);
       state.pangramsFound = action.payload.pangramsFound;
-      state.totalValidWords = puzzle.validWords.length;
+      state.totalValidWords = target;
       state.lastRejectedWord = null;
       state.lastRejectedReason = null;
       state.hintsUsedThisPuzzle = action.payload.hintsUsedThisPuzzle ?? 0;
@@ -255,6 +285,7 @@ export const {
   completePuzzle,
   lockPuzzle,
   revealHint,
+  revealHintWord,
   restoreCompletedPuzzle,
   resetPuzzleState,
 } = puzzleSlice.actions;

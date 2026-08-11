@@ -1,0 +1,102 @@
+spring:
+  application:
+    name: ${APP_NAME:kungfu-word-quest-backend}
+
+  datasource:
+    url: ${DATASOURCE_URL:jdbc:postgresql://localhost:5432/kungfu_word_quest}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
+    driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
+    hikari:
+      maximum-pool-size: ${MAX_POOL_SIZE:10}
+      minimum-idle: ${MIN_IDLE_SIZE:2}
+      connection-timeout: ${CONNECTION_TIMEOUT:30000}
+      idle-timeout: ${IDLE_TIMEOUT:600000}
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: ${HIBERNATE_DIALECT:org.hibernate.dialect.PostgreSQLDialect}
+        format_sql: false
+        jdbc:
+          batch_size: ${BATCH_SIZE:20}
+        order_inserts: true
+        order_updates: true
+    open-in-view: false
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
+
+  task:
+    scheduling:
+      pool:
+        size: ${SCHEDULING_POOL_SIZE:2}
+
+# JWT — never commit real secrets; set JWT_SECRET via environment / .env
+jwt:
+  secret: ${JWT_SECRET}
+  expiration-ms: ${JWT_EXPIRATION_MS:${EXPIRATION_MS:86400000}}
+  refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:${REFRESH_EXPIRATION_MS:604800000}}
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+
+# Puzzle generation & game calendar
+puzzles:
+  game-timezone: ${PUZZLE_GAME_TIMEZONE:Asia/Kolkata}
+  dictionary:
+    path: ${PUZZLE_DICTIONARY_PATH:classpath:dictionaries/wordlist.txt}
+  weekly:
+    easy: ${PUZZLE_WEEKLY_EASY:14}
+    medium: ${PUZZLE_WEEKLY_MEDIUM:14}
+    hard: ${PUZZLE_WEEKLY_HARD:7}
+    expert: ${PUZZLE_WEEKLY_EXPERT:7}
+    max-attempts-per-candidate: ${PUZZLE_MAX_ATTEMPTS:200}
+    min-valid-words: ${PUZZLE_MIN_VALID_WORDS:15}
+  schedule:
+    daily-cron: ${PUZZLE_DAILY_CRON:0 1 0 * * *}
+    weekly-cron: ${PUZZLE_WEEKLY_CRON:0 0 3 * * SUN}
+
+# Offline Word Quest dictionary (ESDB/SCOWL import → PostgreSQL)
+wordquest:
+  dictionary:
+    enabled: ${WQ_DICT_ENABLED:true}
+    source: ${WQ_DICT_SOURCE:ESDB}
+    source-version: ${WQ_DICT_SOURCE_VERSION:1.0.0}
+    path: ${WQ_DICT_PATH:classpath:dictionaries/wordlist.txt}
+    frequency-enabled: ${WQ_DICT_FREQ_ENABLED:true}
+    frequency-source: ${WQ_DICT_FREQ_SOURCE:wordfreq}
+    frequency-path: ${WQ_DICT_FREQ_PATH:}
+    min-word-length: ${WQ_DICT_MIN_LEN:4}
+    max-word-length: ${WQ_DICT_MAX_LEN:32}
+    seed-if-empty: ${WQ_DICT_SEED_IF_EMPTY:true}
+    filter:
+      reject-hyphenated: true
+      reject-apostrophe: true
+      reject-proper-nouns: true
+      reject-numeric: true
+      reject-non-ascii-letters: true
+    difficulty:
+      easy-frequency-threshold: 0.55
+      medium-frequency-threshold: 0.30
+
+logging:
+  level:
+    root: INFO
+    com.kungfu.wordquest: INFO
+    org.springframework.security: WARN

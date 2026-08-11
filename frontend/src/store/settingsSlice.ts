@@ -1,5 +1,13 @@
 import { createSlice } from '@reduxjs/toolkit';
 
+/**
+ * Client-only UI preferences.
+ *
+ * Source of truth decision:
+ * - darkMode / sound → LOCAL (kungfu_settings). Device-specific presentation;
+ *   no backend preferences API exists and Settings UI does not sync them server-side.
+ * - username / email / XP / cards / progression → BACKEND (never stored here).
+ */
 interface SettingsState {
   darkMode: boolean;
   sound: boolean;
@@ -12,7 +20,10 @@ const initialState: SettingsState = (() => {
       const parsed: SettingsState = JSON.parse(saved);
       if (parsed.darkMode) document.documentElement.classList.add('dark');
       else document.documentElement.classList.remove('dark');
-      return parsed;
+      return {
+        darkMode: Boolean(parsed.darkMode),
+        sound: parsed.sound !== false,
+      };
     }
   } catch (error) {
     void error;

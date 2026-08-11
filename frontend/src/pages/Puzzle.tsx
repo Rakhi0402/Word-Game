@@ -8,27 +8,17 @@ import {
   deleteLetter,
   clearWord,
   shuffleLetters,
-  restoreCompletedPuzzle,
   resetPuzzleState,
 } from '../store/puzzleSlice';
 import { refreshDailyHints, resetPuzzleHintCounters } from '../store/cardsSlice';
 import {
   clearBonusFreeHintsNextDay,
-  consumeStreakShield,
-  setDailyStreak,
   setLastPuzzleMeta,
   syncChoicePuzzlesDay,
 } from '../store/userSlice';
 
 import { puzzleService } from '../services/puzzleService';
-import {
-  isDailyCompleted,
-  isTodaysDailyCompleted,
-  loadCompletionForReview,
-  loadDailyCompletion,
-  todayKey,
-  wasYesterdayCompleted,
-} from '../utils/mockProgress';
+import { todayKey } from '../utils/mockProgress';
 import type { PuzzleDifficulty } from '../types';
 import { MAX_CHOICE_PUZZLES_PER_DAY } from '../constants/rewards';
 
@@ -54,7 +44,6 @@ export const Puzzle: React.FC = () => {
   const dispatch = useAppDispatch();
   const puzzle = useAppSelector((state) => state.puzzle);
   const user = useAppSelector((state) => state.user);
-  const email = useAppSelector((state) => state.auth.email || state.user.email);
 
   const [loading, setLoading] = useState(false);
   const [screen, setScreen] = useState<Screen>('loading');
@@ -83,59 +72,36 @@ export const Puzzle: React.FC = () => {
     if (user.bonusFreeHintsNextDay > 0) {
       dispatch(clearBonusFreeHintsNextDay(undefined));
     }
-
-    if (email && user.dailyStreak > 0 && !wasYesterdayCompleted(email) && !isDailyCompleted(email)) {
-      if (user.lastPuzzleDate && user.lastPuzzleDate !== todayKey()) {
-        const last = user.lastPuzzleDate;
-        const yesterday = (() => {
-          const d = new Date();
-          d.setDate(d.getDate() - 1);
-          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        })();
-        if (last < yesterday) {
-          if (user.streakShields > 0) {
-            dispatch(consumeStreakShield(undefined));
-          } else {
-            dispatch(setDailyStreak(0));
-          }
-        }
-      }
-    }
   }, [
     dispatch,
-    email,
     user.permanentExtraDailyHint,
     user.bonusFreeHintsNextDay,
-    user.dailyStreak,
-    user.lastPuzzleDate,
-    user.streakShields,
   ]);
 
   useEffect(() => {
     const boot = async () => {
-      if (!email) {
-        setScreen('choice');
-        setInitDone(true);
-        return;
-      }
-
       setLoading(true);
+      // #region agent log
+      fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'A',location:'Puzzle.tsx:boot-start',message:'Puzzle boot started',data:{choiceRemaining:liveChoiceRemaining,dashCompleted:Boolean(store.getState().dashboard.data?.dailyQuest?.completed)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       try {
         const dailyRes = await puzzleService.getDailyPuzzle();
+        // #region agent log
+        fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'B',location:'Puzzle.tsx:daily-ok',message:'getDailyPuzzle resolved',data:{success:dailyRes.success,hasData:Boolean(dailyRes.data),puzzleId:dailyRes.data?.id??null,lettersLen:dailyRes.data?.letters?.length??0,center:dailyRes.data?.centerLetter??null,completed:Boolean(dailyRes.data?.completed),difficulty:dailyRes.data?.difficulty??null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         if (!dailyRes.success || !dailyRes.data) {
-          setScreen('choice');
+          // #region agent log
+          fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'B',location:'Puzzle.tsx:empty-daily',message:'Daily empty → quota_done',data:{success:dailyRes.success},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          setScreen('quota_done');
           setLoading(false);
           setInitDone(true);
           return;
         }
 
         const todayPuzzle = dailyRes.data;
-        const doneToday = isTodaysDailyCompleted(email, todayPuzzle.id);
-        const remaining =
-          MAX_CHOICE_PUZZLES_PER_DAY -
-          (store.getState().user.choicePuzzlesDate === todayKey()
-            ? store.getState().user.choicePuzzlesCompletedToday
-            : 0);
+        const doneToday = Boolean(todayPuzzle.completed) ||
+          Boolean(store.getState().dashboard.data?.dailyQuest?.completed);
 
         if (!doneToday) {
           const canResume =
@@ -144,22 +110,37 @@ export const Puzzle: React.FC = () => {
             !puzzle.completed &&
             !puzzle.locked;
 
-          if (canResume) {
-            setScreen('play');
-          } else {
+          if (!canResume) {
             dispatch(resetPuzzleState(undefined));
             dispatch(resetPuzzleHintCounters(undefined));
+            await puzzleService.startSession(todayPuzzle.id);
+            // #region agent log
+            fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'D',location:'Puzzle.tsx:session-ok',message:'startSession succeeded; loading play',data:{puzzleId:todayPuzzle.id},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
             dispatch(loadPuzzle({ puzzle: todayPuzzle, isDailySession: true }));
             dispatch(
               setLastPuzzleMeta({ date: todayKey(), difficulty: todayPuzzle.difficulty })
             );
-            setScreen('play');
+          } else {
+            await puzzleService.startSession(todayPuzzle.id).catch(() => undefined);
           }
+          setScreen('play');
+        } else if (liveChoiceRemaining > 0) {
+          // #region agent log
+          fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'C',location:'Puzzle.tsx:daily-done-choice',message:'Daily completed → choice screen',data:{doneToday,choiceRemaining:liveChoiceRemaining},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          setScreen('choice');
         } else {
-          setScreen(remaining > 0 ? 'choice' : 'quota_done');
+          // #region agent log
+          fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'C',location:'Puzzle.tsx:daily-done-quota',message:'Daily completed → quota_done',data:{doneToday,choiceRemaining:liveChoiceRemaining},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          setScreen('quota_done');
         }
-      } catch {
-        setScreen('choice');
+      } catch (err) {
+        // #region agent log
+        fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'A',location:'Puzzle.tsx:boot-catch',message:'Puzzle boot threw → quota_done',data:{errName:err instanceof Error?err.name:'unknown',errMsg:err instanceof Error?err.message:String(err),errStatus:typeof err==='object'&&err&&'status' in err?(err as {status?:number}).status:null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        setScreen('quota_done');
       }
 
       setLoading(false);
@@ -168,58 +149,42 @@ export const Puzzle: React.FC = () => {
 
     void boot();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dispatch, email]);
+  }, [dispatch]);
 
   const startChoiceDifficulty = async (difficulty: PuzzleDifficulty) => {
-    const remaining =
-      MAX_CHOICE_PUZZLES_PER_DAY -
-      (store.getState().user.choicePuzzlesDate === todayKey()
-        ? store.getState().user.choicePuzzlesCompletedToday
-        : 0);
-    if (remaining <= 0) {
+    if (liveChoiceRemaining <= 0) {
       setScreen('quota_done');
       return;
     }
     setLoading(true);
-    dispatch(resetPuzzleState(undefined));
-    dispatch(resetPuzzleHintCounters(undefined));
-    const response = await puzzleService.getPuzzleByDifficulty(difficulty);
-    if (response.success && response.data) {
-      dispatch(loadPuzzle({ puzzle: response.data, isDailySession: false }));
+    try {
+      const res = await puzzleService.getPuzzleByDifficulty(difficulty);
+      if (!res.success || !res.data) {
+        setScreen('quota_done');
+        return;
+      }
+      dispatch(resetPuzzleState(undefined));
+      dispatch(resetPuzzleHintCounters(undefined));
+      await puzzleService.startSession(res.data.id);
+      dispatch(loadPuzzle({ puzzle: res.data, isDailySession: false }));
       dispatch(setLastPuzzleMeta({ date: todayKey(), difficulty }));
       setScreen('play');
+    } catch {
+      setScreen('quota_done');
     }
     setLoading(false);
   };
 
   const viewDailyResult = async () => {
-    if (!email) return;
     setLoading(true);
-    const dailyRes = await puzzleService.getDailyPuzzle();
-    const puzzleId = dailyRes.data?.id;
-    const snapshot =
-      loadCompletionForReview(email, puzzleId) || loadDailyCompletion(email);
-
-    if (!snapshot?.puzzleId) {
-      setLoading(false);
-      return;
-    }
-
-    const response = await puzzleService.getPuzzleById(snapshot.puzzleId);
-    if (response.success && response.data) {
-      dispatch(
-        restoreCompletedPuzzle({
-          puzzle: response.data,
-          wordsFound: snapshot.wordsFound || [],
-          score: snapshot.score || 0,
-          pangramsFound: snapshot.pangramsFound || [],
-          hintedWords: snapshot.hintedWords || [],
-          streak: snapshot.streak || 0,
-          hintsUsedThisPuzzle: snapshot.hintsUsedThisPuzzle,
-          isDailySession: true,
-        })
-      );
-      setScreen('play');
+    try {
+      const dailyRes = await puzzleService.getDailyPuzzle();
+      if (dailyRes.success && dailyRes.data) {
+        dispatch(loadPuzzle({ puzzle: dailyRes.data, isDailySession: true }));
+        setScreen('play');
+      }
+    } catch {
+      /* ignore */
     }
     setLoading(false);
   };
@@ -259,17 +224,16 @@ export const Puzzle: React.FC = () => {
 
   const handleContinueAfterComplete = () => {
     completion.closeCompletionModal();
-    const u = store.getState().user;
-    const remaining =
-      MAX_CHOICE_PUZZLES_PER_DAY -
-      (u.choicePuzzlesDate === todayKey() ? u.choicePuzzlesCompletedToday : 0);
-    setScreen(remaining > 0 ? 'choice' : 'quota_done');
+    if (!puzzle.isDailySession && liveChoiceRemaining > 1) {
+      setScreen('choice');
+    } else if (liveChoiceRemaining > 0) {
+      setScreen('choice');
+    } else {
+      setScreen('quota_done');
+    }
   };
 
-  const dailyDoneToday =
-    Boolean(email) &&
-    Boolean(puzzle.activePuzzleId) &&
-    isTodaysDailyCompleted(email!, puzzle.activePuzzleId || '');
+  const dailyDoneToday = Boolean(store.getState().dashboard.data?.dailyQuest?.completed);
 
   if (!initDone || loading) {
     return (
@@ -282,10 +246,8 @@ export const Puzzle: React.FC = () => {
       <DifficultySelect
         onSelect={(d) => void startChoiceDifficulty(d)}
         remainingToday={liveChoiceRemaining}
-        mode={email && isDailyCompleted(email) ? 'extra' : 'first'}
-        onViewDaily={
-          email && isDailyCompleted(email) ? () => void viewDailyResult() : undefined
-        }
+        mode={dailyDoneToday ? 'extra' : 'first'}
+        onViewDaily={dailyDoneToday ? () => void viewDailyResult() : undefined}
       />
     );
   }
@@ -297,12 +259,19 @@ export const Puzzle: React.FC = () => {
           Quests Complete
         </h2>
         <p className="text-sm text-parchment/70">
-          Daily scroll done and all {MAX_CHOICE_PUZZLES_PER_DAY} extra trials used. Return tomorrow
-          for a fresh daily.
+          Today&apos;s featured daily scroll is complete
+          {liveChoiceRemaining > 0
+            ? `. You still have ${liveChoiceRemaining} extra difficulty trial${liveChoiceRemaining === 1 ? '' : 's'} today.`
+            : '. Come back tomorrow for a new daily scroll.'}
         </p>
-        {email && isDailyCompleted(email) && (
+        {liveChoiceRemaining > 0 && (
+          <Button variant="primary" onClick={() => setScreen('choice')}>
+            Choose difficulty
+          </Button>
+        )}
+        {dailyDoneToday && (
           <Button variant="outline" onClick={() => void viewDailyResult()}>
-            Review today&apos;s daily (found words)
+            Review today&apos;s daily
           </Button>
         )}
       </Card>
@@ -398,7 +367,7 @@ export const Puzzle: React.FC = () => {
         wordsFound={puzzle.wordsFound.length}
         targetWords={puzzle.requiredWordsToComplete}
         pangramsFound={puzzle.pangramsFound.length}
-        totalPangrams={puzzle.pangrams.length}
+        totalPangrams={puzzle.totalPangrams}
         score={puzzle.score}
         rewards={completion.rewards}
         beltUps={completion.beltUps}

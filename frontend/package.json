@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:auth": "npx --yes tsx src/constants/authValidation.test.ts",
+    "test:settings": "npx --yes tsx src/services/settingsService.test.ts",
+    "test:collection": "npx --yes tsx src/services/collectionService.test.ts && npx --yes tsx src/store/applyServerState.collection.test.ts",
+    "test:puzzle": "npx --yes tsx src/services/puzzleService.contract.test.ts",
+    "test:dictionary": "npx --yes tsx src/services/dictionary.contract.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

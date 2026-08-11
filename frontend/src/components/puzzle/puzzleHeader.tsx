@@ -90,7 +90,7 @@ export const PuzzleHeader: React.FC = () => {
           <Sparkles className="mx-auto mb-2 text-purple-500" />
           <p className="text-xl font-bold">
             {puzzle.pangramsFound.length}/
-            {puzzle.pangrams.length}
+            {puzzle.totalPangrams}
           </p>
           <p className="text-xs uppercase">
             Pangrams
