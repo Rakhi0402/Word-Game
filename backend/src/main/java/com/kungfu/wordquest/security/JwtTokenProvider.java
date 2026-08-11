@@ -47,22 +47,6 @@ public class JwtTokenProvider {
         this.key = Keys.hmacShaKeyFor(keyBytes);
         this.accessTokenValidity = accessTokenValidity;
         this.refreshTokenValidity = refreshTokenValidity;
-        // #region agent log
-        try {
-            java.nio.file.Files.writeString(
-                    java.nio.file.Path.of("/home/rakhi-kumai/Word Game/.cursor/debug-156feb.log"),
-                    "{\"sessionId\":\"156feb\",\"runId\":\"jwt-debug\",\"hypothesisId\":\"A\",\"location\":\"JwtTokenProvider.<init>\",\"message\":\"JWT TTL config loaded\",\"data\":{\"accessMs\":"
-                            + accessTokenValidity
-                            + ",\"refreshMs\":"
-                            + refreshTokenValidity
-                            + "},\"timestamp\":"
-                            + System.currentTimeMillis()
-                            + "}\n",
-                    java.nio.file.StandardOpenOption.CREATE,
-                    java.nio.file.StandardOpenOption.APPEND);
-        } catch (Exception ignored) {
-        }
-        // #endregion
     }
 
     public String generateAccessToken(Authentication authentication) {
@@ -127,48 +111,12 @@ public class JwtTokenProvider {
             return true;
         } catch (ExpiredJwtException ex) {
             log.warn("JWT expired.");
-            // #region agent log
-            try {
-                Claims claims = ex.getClaims();
-                long expMs = claims.getExpiration() != null ? claims.getExpiration().getTime() : -1L;
-                long now = System.currentTimeMillis();
-                Object type = claims.get("type");
-                java.nio.file.Files.writeString(
-                        java.nio.file.Path.of("/home/rakhi-kumai/Word Game/.cursor/debug-156feb.log"),
-                        "{\"sessionId\":\"156feb\",\"runId\":\"jwt-debug\",\"hypothesisId\":\"A\",\"location\":\"JwtTokenProvider.validateToken\",\"message\":\"ExpiredJwtException caught\",\"data\":{\"type\":\""
-                                + (type == null ? "null" : type.toString())
-                                + "\",\"expMs\":"
-                                + expMs
-                                + ",\"nowMs\":"
-                                + now
-                                + ",\"overdueMs\":"
-                                + (expMs > 0 ? (now - expMs) : -1)
-                                + "},\"timestamp\":"
-                                + now
-                                + "}\n",
-                        java.nio.file.StandardOpenOption.CREATE,
-                        java.nio.file.StandardOpenOption.APPEND);
-            } catch (Exception ignored) {
-            }
-            // #endregion
         } catch (UnsupportedJwtException ex) {
             log.warn("Unsupported JWT.");
         } catch (MalformedJwtException ex) {
             log.warn("Malformed JWT.");
         } catch (SecurityException ex) {
             log.warn("JWT signature validation failed.");
-            // #region agent log
-            try {
-                java.nio.file.Files.writeString(
-                        java.nio.file.Path.of("/home/rakhi-kumai/Word Game/.cursor/debug-156feb.log"),
-                        "{\"sessionId\":\"156feb\",\"runId\":\"jwt-debug\",\"hypothesisId\":\"D\",\"location\":\"JwtTokenProvider.validateToken\",\"message\":\"JWT signature validation failed\",\"data\":{},\"timestamp\":"
-                                + System.currentTimeMillis()
-                                + "}\n",
-                        java.nio.file.StandardOpenOption.CREATE,
-                        java.nio.file.StandardOpenOption.APPEND);
-            } catch (Exception ignored) {
-            }
-            // #endregion
         } catch (IllegalArgumentException ex) {
             log.warn("JWT is empty.");
         } catch (JwtException ex) {

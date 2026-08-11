@@ -120,9 +120,6 @@ const puzzleSlice = createSlice({
       state.pangrams = [];
       state.totalPangrams = Math.max(0, puzzle.pangramCount ?? 0);
       state.pangramsFound = found.filter((w) => w.isPangram).map((w) => w.text);
-      // #region agent log
-      fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'post-fix',hypothesisId:'P',location:'puzzleSlice.ts:loadPuzzle',message:'Puzzle UI targets loaded',data:{difficulty:puzzle.difficulty,target,totalPangrams:state.totalPangrams,pangramsFound:state.pangramsFound.length,foundCount:found.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       state.lastRejectedWord = null;
       state.lastRejectedReason = null;
       state.hintsUsedThisPuzzle = puzzle.hintsUsed ?? 0;

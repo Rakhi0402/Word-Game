@@ -7,10 +7,6 @@ import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-
 /**
  * Backfills NOT NULL columns that Hibernate ddl-auto cannot add to non-empty tables
  * without a SQL DEFAULT. Safe to run repeatedly (IF NOT EXISTS + null backfill).
@@ -42,21 +38,6 @@ public class DashboardSchemaMigrator {
         ensureNullableVarchar("puzzles", "generation_batch_id", 64);
         ensureNullableVarchar("puzzles", "dictionary_source_version", 64);
         ensurePuzzleWordsTable();
-
-        // #region agent log
-        try {
-            boolean hasMinLen = Boolean.TRUE.equals(jdbcTemplate.queryForObject(
-                    "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='puzzles' AND column_name='minimum_word_length')",
-                    Boolean.class));
-            Files.writeString(
-                    Path.of("/home/rakhi-kumai/Word Game/.cursor/debug-156feb.log"),
-                    "{\"sessionId\":\"156feb\",\"runId\":\"post-fix\",\"hypothesisId\":\"A\",\"location\":\"DashboardSchemaMigrator.migrate\",\"message\":\"Puzzle schema migrate complete\",\"data\":{\"minimum_word_length_exists\":"
-                            + hasMinLen + "},\"timestamp\":" + System.currentTimeMillis() + "}\n",
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-        } catch (Exception ignored) {
-            // debug log best-effort
-        }
-        // #endregion
 
         log.info("Schema migrator finished (users/cards/puzzles columns ensured)");
     }

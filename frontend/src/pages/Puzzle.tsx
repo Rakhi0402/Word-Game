@@ -81,18 +81,9 @@ export const Puzzle: React.FC = () => {
   useEffect(() => {
     const boot = async () => {
       setLoading(true);
-      // #region agent log
-      fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'A',location:'Puzzle.tsx:boot-start',message:'Puzzle boot started',data:{choiceRemaining:liveChoiceRemaining,dashCompleted:Boolean(store.getState().dashboard.data?.dailyQuest?.completed)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       try {
         const dailyRes = await puzzleService.getDailyPuzzle();
-        // #region agent log
-        fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'B',location:'Puzzle.tsx:daily-ok',message:'getDailyPuzzle resolved',data:{success:dailyRes.success,hasData:Boolean(dailyRes.data),puzzleId:dailyRes.data?.id??null,lettersLen:dailyRes.data?.letters?.length??0,center:dailyRes.data?.centerLetter??null,completed:Boolean(dailyRes.data?.completed),difficulty:dailyRes.data?.difficulty??null},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         if (!dailyRes.success || !dailyRes.data) {
-          // #region agent log
-          fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'B',location:'Puzzle.tsx:empty-daily',message:'Daily empty → quota_done',data:{success:dailyRes.success},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           setScreen('quota_done');
           setLoading(false);
           setInitDone(true);
@@ -114,9 +105,6 @@ export const Puzzle: React.FC = () => {
             dispatch(resetPuzzleState(undefined));
             dispatch(resetPuzzleHintCounters(undefined));
             await puzzleService.startSession(todayPuzzle.id);
-            // #region agent log
-            fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'D',location:'Puzzle.tsx:session-ok',message:'startSession succeeded; loading play',data:{puzzleId:todayPuzzle.id},timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
             dispatch(loadPuzzle({ puzzle: todayPuzzle, isDailySession: true }));
             dispatch(
               setLastPuzzleMeta({ date: todayKey(), difficulty: todayPuzzle.difficulty })
@@ -126,20 +114,11 @@ export const Puzzle: React.FC = () => {
           }
           setScreen('play');
         } else if (liveChoiceRemaining > 0) {
-          // #region agent log
-          fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'C',location:'Puzzle.tsx:daily-done-choice',message:'Daily completed → choice screen',data:{doneToday,choiceRemaining:liveChoiceRemaining},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           setScreen('choice');
         } else {
-          // #region agent log
-          fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'C',location:'Puzzle.tsx:daily-done-quota',message:'Daily completed → quota_done',data:{doneToday,choiceRemaining:liveChoiceRemaining},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           setScreen('quota_done');
         }
-      } catch (err) {
-        // #region agent log
-        fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'A',location:'Puzzle.tsx:boot-catch',message:'Puzzle boot threw → quota_done',data:{errName:err instanceof Error?err.name:'unknown',errMsg:err instanceof Error?err.message:String(err),errStatus:typeof err==='object'&&err&&'status' in err?(err as {status?:number}).status:null},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
+      } catch {
         setScreen('quota_done');
       }
 

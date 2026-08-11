@@ -60,9 +60,6 @@ export const mapBackendPuzzle = (p: BackendPuzzle, progress?: BackendPuzzleView[
     hintsUsed: progress?.hintsUsed ?? 0,
     status: progress?.status,
   };
-  // #region agent log
-  fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'post-fix',hypothesisId:'T',location:'gameApi.ts:mapBackendPuzzle',message:'Mapped puzzle targets + pangramCount',data:{difficulty,ruleTarget,serverTarget:serverTarget??null,targetWordCount,pangramCount:mapped.pangramCount,lettersLen:mapped.letters.length},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   return mapped;
 };
 
@@ -72,9 +69,6 @@ const mapPuzzleView = (view: BackendPuzzleView): DailyPuzzle =>
 export const puzzleService = {
   getDailyPuzzle: async () => {
     const data = await apiRequest<BackendPuzzleView>('/api/v1/puzzles/daily', { method: 'GET' });
-    // #region agent log
-    fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'B',location:'gameApi.ts:getDailyPuzzle',message:'Raw daily API payload shape',data:{hasPuzzle:Boolean(data&&(data as BackendPuzzleView).puzzle),hasProgress:Boolean(data&&(data as BackendPuzzleView).progress),topKeys:data&&typeof data==='object'?Object.keys(data as object):[],puzzleKeys:data&&typeof data==='object'&&(data as BackendPuzzleView).puzzle?Object.keys((data as BackendPuzzleView).puzzle as object):[],lettersLen:(data as BackendPuzzleView)?.puzzle?.letters?.length??null,id:(data as BackendPuzzleView)?.puzzle?.id??(data as {id?:string})?.id??null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     return { success: true as const, data: mapPuzzleView(data) };
   },
 

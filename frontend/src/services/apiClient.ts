@@ -108,12 +108,7 @@ export async function apiRequest<T>(
   let res: Response;
   try {
     res = await fetch(url, { ...rest, headers: hdrs });
-  } catch (netErr) {
-    // #region agent log
-    if (path.includes('/puzzles/')) {
-      fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'A',location:'apiClient.ts:network',message:'Puzzle API network failure',data:{path,apiBase:API_BASE||'(empty-proxy)',err:netErr instanceof Error?netErr.message:String(netErr)},timestamp:Date.now()})}).catch(()=>{});
-    }
-    // #endregion
+  } catch {
     throw new ApiClientError(
       'Cannot reach the server. Check that the backend is running.',
       0,
@@ -130,19 +125,10 @@ export async function apiRequest<T>(
   }
 
   if (res.status === 401 && !skipAuth && retry && !path.includes('/auth/login')) {
-    // #region agent log
-    fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'jwt-debug',hypothesisId:'A',location:'apiClient.ts:401',message:'API returned 401, attempting refresh',data:{path,status:res.status,errorMsg:body?.error?.message||body?.message||null,hasRefresh:Boolean(getRefreshToken())},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const refreshed = await tryRefreshAccessToken();
     if (refreshed) {
-      // #region agent log
-      fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'jwt-debug',hypothesisId:'B',location:'apiClient.ts:refresh-ok',message:'Token refresh succeeded',data:{path},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return apiRequest<T>(path, { ...options, retry: false });
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'jwt-debug',hypothesisId:'B',location:'apiClient.ts:refresh-fail',message:'Token refresh failed; forcing logout path',data:{path,errorMsg:body?.error?.message||body?.message||null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     onUnauthorized?.();
     throw new ApiClientError(body?.error?.message || body?.message || 'Unauthorized', 401, {
       code: body?.error?.code,
@@ -150,11 +136,6 @@ export async function apiRequest<T>(
   }
 
   if (!res.ok || body?.success === false) {
-    // #region agent log
-    if (path.includes('/puzzles/')) {
-      fetch('http://127.0.0.1:7624/ingest/d78d18c5-ea90-45b2-8e2a-cd4467b12b59',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'156feb'},body:JSON.stringify({sessionId:'156feb',runId:'pre-fix',hypothesisId:'A',location:'apiClient.ts:http-error',message:'Puzzle API non-OK response',data:{path,status:res.status,success:body?.success??null,msg:body?.error?.message||body?.message||null,code:body?.error?.code??null},timestamp:Date.now()})}).catch(()=>{});
-    }
-    // #endregion
     const fieldErrors =
       body?.data && typeof body.data === 'object' && !Array.isArray(body.data)
         ? (body.data as unknown as Record<string, string>)

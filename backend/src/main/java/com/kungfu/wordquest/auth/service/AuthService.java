@@ -133,40 +133,11 @@ public class AuthService {
 
     public AuthResponse refresh(String refreshToken) {
         if (!tokenProvider.validateToken(refreshToken)) {
-            // #region agent log
-            try {
-                boolean expired = tokenProvider.isExpired(refreshToken);
-                java.nio.file.Files.writeString(
-                        java.nio.file.Path.of("/home/rakhi-kumai/Word Game/.cursor/debug-156feb.log"),
-                        "{\"sessionId\":\"156feb\",\"runId\":\"jwt-debug\",\"hypothesisId\":\"B\",\"location\":\"AuthService.refresh\",\"message\":\"Refresh token invalid\",\"data\":{\"expired\":"
-                                + expired
-                                + "},\"timestamp\":"
-                                + System.currentTimeMillis()
-                                + "}\n",
-                        java.nio.file.StandardOpenOption.CREATE,
-                        java.nio.file.StandardOpenOption.APPEND);
-            } catch (Exception ignored) {
-            }
-            // #endregion
             throw new UnauthorizedException(ErrorCode.INVALID_TOKEN, "Invalid refresh token.");
         }
 
         String type = tokenProvider.extractClaims(refreshToken).get("type", String.class);
         if (!"REFRESH".equals(type)) {
-            // #region agent log
-            try {
-                java.nio.file.Files.writeString(
-                        java.nio.file.Path.of("/home/rakhi-kumai/Word Game/.cursor/debug-156feb.log"),
-                        "{\"sessionId\":\"156feb\",\"runId\":\"jwt-debug\",\"hypothesisId\":\"E\",\"location\":\"AuthService.refresh\",\"message\":\"Wrong token type for refresh\",\"data\":{\"type\":\""
-                                + type
-                                + "\"},\"timestamp\":"
-                                + System.currentTimeMillis()
-                                + "}\n",
-                        java.nio.file.StandardOpenOption.CREATE,
-                        java.nio.file.StandardOpenOption.APPEND);
-            } catch (Exception ignored) {
-            }
-            // #endregion
             throw new UnauthorizedException(ErrorCode.INVALID_TOKEN, "Token is not a refresh token.");
         }
 
@@ -177,22 +148,6 @@ public class AuthService {
                 .orElseThrow(() -> new UnauthorizedException(ErrorCode.INVALID_TOKEN, "Invalid refresh token."));
 
         if (tokenVer != null && tokenVer != user.getTokenVersion()) {
-            // #region agent log
-            try {
-                java.nio.file.Files.writeString(
-                        java.nio.file.Path.of("/home/rakhi-kumai/Word Game/.cursor/debug-156feb.log"),
-                        "{\"sessionId\":\"156feb\",\"runId\":\"jwt-debug\",\"hypothesisId\":\"B\",\"location\":\"AuthService.refresh\",\"message\":\"Refresh revoked via tokenVersion\",\"data\":{\"tokenVer\":"
-                                + tokenVer
-                                + ",\"userVer\":"
-                                + user.getTokenVersion()
-                                + "},\"timestamp\":"
-                                + System.currentTimeMillis()
-                                + "}\n",
-                        java.nio.file.StandardOpenOption.CREATE,
-                        java.nio.file.StandardOpenOption.APPEND);
-            } catch (Exception ignored) {
-            }
-            // #endregion
             throw new UnauthorizedException(ErrorCode.INVALID_TOKEN, "Refresh token has been revoked.");
         }
 

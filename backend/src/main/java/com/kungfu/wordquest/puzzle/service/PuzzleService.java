@@ -158,20 +158,6 @@ public class PuzzleService {
                 session.getWordsFound() != null ? session.getWordsFound() : List.of());
         session.setWordsFound(found);
 
-        // #region agent log
-        try {
-            java.nio.file.Files.writeString(
-                    java.nio.file.Path.of("/home/rakhi-kumai/Word Game/.cursor/debug-156feb.log"),
-                    "{\"sessionId\":\"156feb\",\"runId\":\"post-fix\",\"hypothesisId\":\"E\",\"location\":\"PuzzleService.submitWord\",\"message\":\"Mutable wordsFound ready\",\"data\":{\"listClass\":\""
-                            + found.getClass().getName()
-                            + "\",\"size\":" + found.size()
-                            + ",\"wordLen\":" + word.length()
-                            + "},\"timestamp\":" + System.currentTimeMillis() + "}\n",
-                    java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
-        } catch (Exception ignored) {
-        }
-        // #endregion
-
         if (found.stream().anyMatch(w -> w.equalsIgnoreCase(word))) {
             return SubmitWordResponse.builder().valid(false).duplicate(true).points(0).build();
         }
@@ -405,26 +391,7 @@ public class PuzzleService {
         int snapshotCount = (int) puzzleWordSnapshotService.countWords(puzzle.getId());
         int legacyCount = puzzle.getValidWords() == null ? 0 : puzzle.getValidWords().size();
         int total = Math.max(snapshotCount, legacyCount);
-        int required = total > 0 ? Math.min(canonical, total) : canonical;
-
-        // #region agent log
-        try {
-            java.nio.file.Files.writeString(
-                    java.nio.file.Path.of("/home/rakhi-kumai/Word Game/.cursor/debug-156feb.log"),
-                    "{\"sessionId\":\"156feb\",\"runId\":\"post-fix\",\"hypothesisId\":\"T\",\"location\":\"PuzzleService.requiredWords\",\"message\":\"Canonical target applied\",\"data\":{\"difficulty\":\""
-                            + puzzle.getDifficulty()
-                            + "\",\"storedTarget\":" + puzzle.getTargetWordCount()
-                            + ",\"canonical\":" + canonical
-                            + ",\"snapshotCount\":" + snapshotCount
-                            + ",\"legacyCount\":" + legacyCount
-                            + ",\"required\":" + required
-                            + "},\"timestamp\":" + System.currentTimeMillis() + "}\n",
-                    java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
-        } catch (Exception ignored) {
-        }
-        // #endregion
-
-        return required;
+        return total > 0 ? Math.min(canonical, total) : canonical;
     }
 
     private int safePangramCount(Puzzle puzzle) {

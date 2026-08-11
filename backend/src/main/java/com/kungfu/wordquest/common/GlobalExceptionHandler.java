@@ -88,18 +88,6 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ExpiredJwtException.class)
     public ResponseEntity<ApiResponse<Void>> handleExpiredJwt() {
-        // #region agent log
-        try {
-            java.nio.file.Files.writeString(
-                    java.nio.file.Path.of("/home/rakhi-kumai/Word Game/.cursor/debug-156feb.log"),
-                    "{\"sessionId\":\"156feb\",\"runId\":\"jwt-debug\",\"hypothesisId\":\"C\",\"location\":\"GlobalExceptionHandler.handleExpiredJwt\",\"message\":\"Returning JWT expired to client\",\"data\":{},\"timestamp\":"
-                            + System.currentTimeMillis()
-                            + "}\n",
-                    java.nio.file.StandardOpenOption.CREATE,
-                    java.nio.file.StandardOpenOption.APPEND);
-        } catch (Exception ignored) {
-        }
-        // #endregion
         return unauthorized("JWT expired", ErrorCode.INVALID_TOKEN);
     }
 
