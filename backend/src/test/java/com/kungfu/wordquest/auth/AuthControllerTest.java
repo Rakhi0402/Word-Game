@@ -10,13 +10,14 @@ import com.kungfu.wordquest.common.exception.ErrorCode;
 import com.kungfu.wordquest.security.JwtAuthenticationFilter;
 import com.kungfu.wordquest.security.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
@@ -35,9 +36,10 @@ class AuthControllerTest {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
 
-    @MockBean AuthService authService;
-    @MockBean JwtTokenProvider jwtTokenProvider;
-    @MockBean JwtAuthenticationFilter jwtAuthenticationFilter;
+    @MockitoBean
+    AuthService authService;
+    @MockitoBean JwtTokenProvider jwtTokenProvider;
+    @MockitoBean JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Test
     void register_validationError_blankUsername() throws Exception {

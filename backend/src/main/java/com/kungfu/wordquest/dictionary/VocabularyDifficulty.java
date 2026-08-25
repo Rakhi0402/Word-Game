@@ -6,5 +6,6 @@ package com.kungfu.wordquest.dictionary;
 public enum VocabularyDifficulty {
     EASY,
     MEDIUM,
-    HARD
+    HARD,
+    EXPERT
 }

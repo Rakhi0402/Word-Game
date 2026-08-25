@@ -46,8 +46,7 @@ class DictionaryImportServiceTest {
         assertEquals("ESDB", result.getSource());
         assertEquals("1.0.0", result.getSourceVersion());
         assertTrue(result.getAccepted() > 50);
-        assertTrue(result.getProcessed() > result.getAccepted());
-        // wordlist contains repeated lines (e.g. dragon) — counted as file duplicates
+        assertEquals(result.getProcessed(), result.getAccepted());        // wordlist contains repeated lines (e.g. dragon) — counted as file duplicates
         assertTrue(result.getDuplicates() >= 0);
         verify(repository, atLeastOnce()).save(any(WordDictionaryEntry.class));
     }

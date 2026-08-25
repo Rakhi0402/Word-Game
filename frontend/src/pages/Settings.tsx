@@ -20,7 +20,9 @@ import {
   RotateCcw,
   ShieldAlert,
   Settings as SettingsIcon,
+  Shield,
 } from 'lucide-react';
+import { isAdmin } from '../utils/roles';
 
 export const Settings: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -146,6 +148,19 @@ export const Settings: React.FC = () => {
                     <span className="text-parchment/50"> · {accountEmail}</span>
                   ) : null}
                 </p>
+              )}
+              {isAdmin(auth.user?.role) && (
+                <Button
+                  variant="outline"
+                  className="mt-3 px-3 py-1.5 text-xs flex items-center gap-1.5"
+                  onClick={() => {
+                    playSound.click(soundEnabled);
+                    navigate('/admin');
+                  }}
+                >
+                  <Shield className="h-3.5 w-3.5" />
+                  Open Admin Console
+                </Button>
               )}
             </div>
           </div>

@@ -1,0 +1,16 @@
+```js
+console.log("Operating System:", process.platform);
+console.log("OS Version:", process.getSystemVersion());
+console.log("Architecture:", process.arch);
+console.log("Node.js Version:", process.version);
+console.log("User Name:", process.env.USER || process.env.USERNAME);
+console.log("Home Directory:", process.env.HOME || process.env.USERPROFILE);
+console.log("Working Directory:", process.cwd());
+console.log("Available Processors:", require("os").cpus().length);
+console.log("Total Memory:",
+  Math.round(require("os").totalmem() / (1024 * 1024)) + " MB"
+);
+console.log("Free Memory:",
+  Math.round(require("os").freemem() / (1024 * 1024)) + " MB"
+);
+```

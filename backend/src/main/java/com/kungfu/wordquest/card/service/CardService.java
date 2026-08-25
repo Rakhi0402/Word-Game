@@ -72,6 +72,7 @@ public class CardService {
     }
 
     /** @deprecated Prefer {@link #getCollection(UUID)} DTO; kept for internal callers. */
+    @Deprecated
     @Transactional(readOnly = true)
     public List<UserCard> getUserInventory(UUID userId) {
         return userCardRepository.findByUserIdWithCard(userId);

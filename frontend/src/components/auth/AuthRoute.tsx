@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAppSelector } from '../../store';
+import { isAdmin } from '../../utils/roles';
 
 interface RouteProps {
   children: React.ReactElement;
@@ -24,5 +25,20 @@ export const PublicRoute: React.FC<RouteProps> = ({ children }) => {
     return <Navigate to="/home" replace />;
   }
 
+  return children;
+};
+
+/** Requires authentication and ROLE_ADMIN. */
+export const AdminRoute: React.FC<RouteProps> = ({ children }) => {
+  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
+  const role = useAppSelector((state) => state.auth.user?.role);
+  const location = useLocation();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+  if (!isAdmin(role)) {
+    return <Navigate to="/home" replace />;
+  }
   return children;
 };

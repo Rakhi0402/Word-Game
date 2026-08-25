@@ -12,6 +12,8 @@ public enum ErrorCode {
 
     CARD_NOT_FOUND(HttpStatus.NOT_FOUND),
 
+    ACHIEVEMENT_NOT_FOUND(HttpStatus.NOT_FOUND),
+
     INVALID_TOKEN(HttpStatus.UNAUTHORIZED),
 
     ACCESS_DENIED(HttpStatus.FORBIDDEN),

@@ -14,12 +14,19 @@ import com.kungfu.wordquest.puzzle.repository.PuzzleRepository;
 import com.kungfu.wordquest.puzzle.time.GameClock;
 import com.kungfu.wordquest.reward.entity.Achievement;
 import com.kungfu.wordquest.reward.repository.AchievementRepository;
+import com.kungfu.wordquest.user.entity.User;
+import com.kungfu.wordquest.user.entity.UserRole;
+import com.kungfu.wordquest.user.entity.UserStats;
+import com.kungfu.wordquest.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.DependsOn;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -36,15 +43,59 @@ public class DatabaseSeeder implements CommandLineRunner {
     private final PuzzleRepository puzzleRepository;
     private final DailyPuzzleRepository dailyPuzzleRepository;
     private final AchievementRepository achievementRepository;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
     private final GameClock gameClock;
     private final PuzzleWordSnapshotService puzzleWordSnapshotService;
     private final DictionaryProperties dictionaryProperties;
+
+    @Value("${admin.email:}")
+    private String adminEmail;
 
     @Override
     public void run(String... args) {
         seedCards();
         seedPuzzles();
         seedAchievements();
+        seedLocalAdminIfNeeded();
+    }
+
+    /**
+     * Dev-only fallback when env bootstrap is unset and no ROLE_ADMIN exists.
+     * Credentials: admin@local.test / Admin123!
+     */
+    private void seedLocalAdminIfNeeded() {
+        if (StringUtils.hasText(adminEmail)) {
+            return;
+        }
+        if (userRepository.countByRole(UserRole.ROLE_ADMIN) > 0) {
+            return;
+        }
+        String email = "admin@local.test";
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            User existing = userRepository.findByEmailIgnoreCase(email).orElseThrow();
+            existing.setRole(UserRole.ROLE_ADMIN);
+            existing.setEnabled(true);
+            existing.setLocked(false);
+            existing.setTokenVersion(existing.getTokenVersion() + 1);
+            userRepository.save(existing);
+            log.warn("Promoted {} to ROLE_ADMIN (local seeder fallback)", email);
+            return;
+        }
+        String encoded = passwordEncoder.encode("Admin123!");
+        User admin = User.builder()
+                .username("admin")
+                .email(email)
+                .passwordHash(encoded)
+                .legacyPassword(encoded)
+                .role(UserRole.ROLE_ADMIN)
+                .coins(GameEconomy.STARTING_COINS)
+                .enabled(true)
+                .locked(false)
+                .build();
+        admin.setStats(UserStats.builder().user(admin).build());
+        userRepository.save(admin);
+        log.warn("Seeded local admin {} / Admin123! — do not use in production", email);
     }
 
     private void seedCards() {

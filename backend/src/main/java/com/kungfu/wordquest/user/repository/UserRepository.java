@@ -83,6 +83,18 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     // Admin
     // ==========================
 
+    long countByRole(com.kungfu.wordquest.user.entity.UserRole role);
+
+    @EntityGraph(attributePaths = "stats")
+    @Query("""
+            SELECT u FROM User u
+            WHERE (:q IS NULL OR :q = ''
+               OR LOWER(u.username) LIKE LOWER(CONCAT('%', :q, '%'))
+               OR LOWER(u.email) LIKE LOWER(CONCAT('%', :q, '%')))
+            ORDER BY u.createdAt DESC
+            """)
+    Page<User> searchAdminUsers(@Param("q") String q, Pageable pageable);
+
     @Query("""
             SELECT u
             FROM User u

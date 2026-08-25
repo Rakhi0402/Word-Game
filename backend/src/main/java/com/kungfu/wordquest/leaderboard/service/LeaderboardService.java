@@ -110,12 +110,14 @@ public class LeaderboardService {
     }
 
     /** @deprecated Prefer {@link #getLeaderboard(int, int, UUID)}; kept for internal callers. */
+    @Deprecated
     @Transactional(readOnly = true)
     public List<LeaderboardEntryDto> getTopPlayers(int limit) {
         return getLeaderboard(0, limit, null).getEntries();
     }
 
     /** @deprecated Prefer {@link #getMyRank(UUID)}. */
+    @Deprecated
     @Transactional(readOnly = true)
     public Integer getPlayerRank(String username) {
         return userRepository.findByUsername(username)

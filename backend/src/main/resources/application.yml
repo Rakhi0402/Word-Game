@@ -49,6 +49,12 @@ jwt:
   expiration-ms: ${JWT_EXPIRATION_MS:${EXPIRATION_MS:86400000}}
   refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:${REFRESH_EXPIRATION_MS:604800000}}
 
+# Optional first-admin bootstrap (see AdminBootstrapRunner)
+admin:
+  email: ${ADMIN_EMAIL:}
+  password: ${ADMIN_PASSWORD:}
+  username: ${ADMIN_USERNAME:}
+
 server:
   port: ${SERVER_PORT:8080}
   error:
@@ -100,3 +106,4 @@ logging:
     root: INFO
     com.kungfu.wordquest: INFO
     org.springframework.security: WARN
+

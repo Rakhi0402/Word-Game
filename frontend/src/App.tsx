@@ -6,7 +6,8 @@ import { hydrateSession } from './store/session';
 import { assetPreloader } from './utils/preloader';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { Layout } from './components/layout/Layout';
-import { ProtectedRoute, PublicRoute } from './components/auth/AuthRoute';
+import { ProtectedRoute, PublicRoute, AdminRoute } from './components/auth/AuthRoute';
+import { AdminLayout } from './components/admin/AdminLayout';
 
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
@@ -16,6 +17,12 @@ import { Collection } from './pages/Collection';
 import { Leaderboard } from './pages/Leaderboard';
 import { Profile } from './pages/Profile';
 import { Settings } from './pages/Settings';
+import { AdminOverviewPage } from './pages/admin/AdminOverviewPage';
+import { AdminUsersPage } from './pages/admin/AdminUsersPage';
+import { AdminPuzzlesPage } from './pages/admin/AdminPuzzlesPage';
+import { AdminCardsPage } from './pages/admin/AdminCardsPage';
+import { AdminAchievementsPage } from './pages/admin/AdminAchievementsPage';
+import { AdminDictionaryPage } from './pages/admin/AdminDictionaryPage';
 
 export const App: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -86,6 +93,22 @@ export const App: React.FC = () => {
           <Route path="leaderboard" element={<Leaderboard />} />
           <Route path="profile" element={<Profile />} />
           <Route path="settings" element={<Settings />} />
+        </Route>
+
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminLayout />
+            </AdminRoute>
+          }
+        >
+          <Route index element={<AdminOverviewPage />} />
+          <Route path="users" element={<AdminUsersPage />} />
+          <Route path="puzzles" element={<AdminPuzzlesPage />} />
+          <Route path="cards" element={<AdminCardsPage />} />
+          <Route path="achievements" element={<AdminAchievementsPage />} />
+          <Route path="dictionary" element={<AdminDictionaryPage />} />
         </Route>
 
         <Route

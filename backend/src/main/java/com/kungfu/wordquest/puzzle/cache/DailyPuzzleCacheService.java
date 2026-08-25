@@ -56,6 +56,14 @@ public class DailyPuzzleCacheService {
         }
     }
 
+    public void evict(LocalDate gameDate) {
+        try {
+            redis.delete(key(gameDate));
+        } catch (Exception e) {
+            log.warn("Redis daily-puzzle evict failed for {}: {}", gameDate, e.getMessage());
+        }
+    }
+
     private static String key(LocalDate gameDate) {
         return KEY_PREFIX + gameDate;
     }

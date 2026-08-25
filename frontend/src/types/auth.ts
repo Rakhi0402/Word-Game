@@ -2,6 +2,7 @@ export interface AuthUser {
   userId: string;
   userName: string;
   userEmail: string;
+  /** Backend enum name, e.g. ROLE_USER / ROLE_ADMIN */
   role?: string;
   belt?: string;
   xp?: number;

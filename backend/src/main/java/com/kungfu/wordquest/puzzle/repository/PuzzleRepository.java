@@ -27,6 +27,12 @@ public interface PuzzleRepository extends JpaRepository<Puzzle, UUID> {
 
     List<Puzzle> findByDifficulty(PuzzleDifficulty difficulty);
 
+    org.springframework.data.domain.Page<Puzzle> findByDifficulty(
+            PuzzleDifficulty difficulty, org.springframework.data.domain.Pageable pageable);
+
+    org.springframework.data.domain.Page<Puzzle> findByActive(
+            boolean active, org.springframework.data.domain.Pageable pageable);
+
     @Query("""
             SELECT p FROM Puzzle p
             WHERE p.active = true
