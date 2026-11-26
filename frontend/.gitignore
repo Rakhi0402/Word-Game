@@ -10,6 +10,13 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.vite
+
+# Secrets / local env
+.env
+.env.*
+!.env.example
+!.env.development.example
 *.local
 
 # Editor directories and files
@@ -17,10 +24,12 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*~
 
 /src/store/applyServerState.collection.test.ts

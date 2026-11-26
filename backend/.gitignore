@@ -3,6 +3,9 @@ out/
 !**/src/main/**/out/
 !**/src/test/**/out/
 .kotlin
+.idea/
+*.iml
+.junie/
 
 ### Eclipse ###
 .apt_generated
@@ -28,13 +31,19 @@ bin/
 
 ### Secrets ###
 .env
-.env.local
+.env.*
+!.env.example
 *.pem
+*.p12
+*.jks
+credentials.json
+**/secrets/
 
 ### Mac OS ###
 .DS_Store
+Thumbs.db
 
 ### Build ###
 target/
-/.idea/
-/.junie/
+**/hs_err_pid*
+*.log
