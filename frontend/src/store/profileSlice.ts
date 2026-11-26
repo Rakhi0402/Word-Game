@@ -1,7 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
-import { profileService } from '../services/profileService';
-import { cardService } from '../services/gameApi';
+import { profileService } from '../services/gameApi';
 import type { ProfileResponse } from '../types/profile';
 import { ApiClientError } from '../types/auth';
 import { applyProfileSnapshot } from './applyServerState';
@@ -21,17 +20,18 @@ const initialState: ProfileState = {
   lastFetchedAt: null,
 };
 
+/**
+ * Profile endpoint already includes achievements — one cached call, no inventory fan-out.
+ */
 export const fetchProfile = createAsyncThunk<
   ProfileResponse,
-  void,
+  { force?: boolean } | void,
   { dispatch: AppDispatch; state: RootState; rejectValue: string }
->('profile/fetch', async (_, { dispatch, rejectWithValue }) => {
+>('profile/fetch', async (arg, { dispatch, rejectWithValue }) => {
   try {
-    const [profile, inventory] = await Promise.all([
-      profileService.getProfile(),
-      cardService.getInventory().catch(() => ({ cards: [], equippedCardId: null })),
-    ]);
-    applyProfileSnapshot(dispatch, { profile, inventory });
+    const force = Boolean(arg && typeof arg === 'object' && arg.force);
+    const profile = await profileService.getProfile({ force });
+    applyProfileSnapshot(dispatch, { profile });
     return profile;
   } catch (err) {
     const message =

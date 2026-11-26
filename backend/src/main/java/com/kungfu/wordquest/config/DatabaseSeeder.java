@@ -21,8 +21,8 @@ import com.kungfu.wordquest.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.context.annotation.DependsOn;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -32,12 +32,15 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Seeds cards / sample puzzles / achievements before the (slow) dictionary import
+ * so Home and Quest work immediately on a fresh database.
+ */
 @Component
-@Order(100)
-@DependsOn("dashboardSchemaMigrator")
+@Order(20)
 @RequiredArgsConstructor
 @Slf4j
-public class DatabaseSeeder implements CommandLineRunner {
+public class DatabaseSeeder implements ApplicationRunner {
 
     private final CardRepository cardRepository;
     private final PuzzleRepository puzzleRepository;
@@ -52,8 +55,11 @@ public class DatabaseSeeder implements CommandLineRunner {
     @Value("${admin.email:}")
     private String adminEmail;
 
+    @Value("${app.seed.local-admin:false}")
+    private boolean localAdminSeed;
+
     @Override
-    public void run(String... args) {
+    public void run(ApplicationArguments args) {
         seedCards();
         seedPuzzles();
         seedAchievements();
@@ -65,6 +71,9 @@ public class DatabaseSeeder implements CommandLineRunner {
      * Credentials: admin@local.test / Admin123!
      */
     private void seedLocalAdminIfNeeded() {
+        if (!localAdminSeed) {
+            return;
+        }
         if (StringUtils.hasText(adminEmail)) {
             return;
         }
@@ -266,7 +275,7 @@ public class DatabaseSeeder implements CommandLineRunner {
             case HARD -> GameEconomy.difficulty("Hard");
             case EXPERT -> GameEconomy.difficulty("Expert");
         };
-        return puzzleRepository.save(Puzzle.builder()
+        return puzzleRepository.saveAndFlush(Puzzle.builder()
                 .puzzleDate(date)
                 .letters(letters)
                 .centerLetter(center)

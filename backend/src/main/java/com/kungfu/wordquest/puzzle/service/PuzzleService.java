@@ -1,6 +1,7 @@
 package com.kungfu.wordquest.puzzle.service;
 
 import com.kungfu.wordquest.card.service.CardService;
+import com.kungfu.wordquest.common.constants.CardIds;
 import com.kungfu.wordquest.common.exception.ErrorCode;
 import com.kungfu.wordquest.common.exception.ResourceNotFoundException;
 import com.kungfu.wordquest.common.exception.ValidationException;
@@ -10,11 +11,14 @@ import com.kungfu.wordquest.economy.GameEconomy;
 import com.kungfu.wordquest.economy.ProgressionService;
 import com.kungfu.wordquest.leaderboard.service.LeaderboardService;
 import com.kungfu.wordquest.puzzle.cache.DailyPuzzleCacheService;
+import com.kungfu.wordquest.puzzle.cache.PuzzlePoolCacheService;
 import com.kungfu.wordquest.puzzle.dto.DailyPuzzleCacheDto;
 import com.kungfu.wordquest.puzzle.dto.PuzzlePlayDto;
 import com.kungfu.wordquest.puzzle.dto.PuzzleProgressDto;
 import com.kungfu.wordquest.puzzle.dto.PuzzleViewResponse;
 import com.kungfu.wordquest.puzzle.dto.SubmitWordResponse;
+import com.kungfu.wordquest.puzzle.dto.SyncProgressRequest;
+import com.kungfu.wordquest.puzzle.dto.SyncProgressResponse;
 import com.kungfu.wordquest.puzzle.entity.DailyPuzzle;
 import com.kungfu.wordquest.puzzle.entity.Puzzle;
 import com.kungfu.wordquest.puzzle.entity.UserPuzzleSession;
@@ -64,10 +68,12 @@ public class PuzzleService {
     private final CardService cardService;
     private final ProgressionService progressionService;
     private final DailyPuzzleCacheService dailyPuzzleCache;
+    private final PuzzlePoolCacheService puzzlePoolCache;
     private final GameClock gameClock;
     private final PuzzleSchedulerJobs puzzleSchedulerJobs;
     private final PuzzleWordSnapshotService puzzleWordSnapshotService;
     private final WordNormalizer wordNormalizer;
+    private final PuzzleSessionFactory puzzleSessionFactory;
 
     @Transactional
     public PuzzleViewResponse getDailyPuzzle(UUID userId) {
@@ -111,7 +117,7 @@ public class PuzzleService {
     }
 
     @Transactional
-    public UserPuzzleSession startSession(UUID userId, UUID puzzleId) {
+    public UserPuzzleSession startSession(UUID userId, Long puzzleId) {
         User user = requireUser(userId);
         Puzzle puzzle = puzzleRepository.findById(puzzleId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.PUZZLE_NOT_FOUND, "Puzzle not found"));
@@ -127,19 +133,11 @@ public class PuzzleService {
             ensureChoiceQuota(user);
         }
 
-        return sessionRepository.save(UserPuzzleSession.builder()
-                .user(user)
-                .puzzle(puzzle)
-                .wordsFound(new ArrayList<>())
-                .hintedWords(new ArrayList<>())
-                .currentScore(0)
-                .currentStreak(0)
-                .completed(false)
-                .build());
+        return puzzleSessionFactory.getOrCreate(user, puzzle);
     }
 
     @Transactional
-    public SubmitWordResponse submitWord(UUID userId, UUID puzzleId, String rawWord) {
+    public SubmitWordResponse submitWord(UUID userId, Long puzzleId, String rawWord) {
         User user = requireUser(userId);
         UserPuzzleSession session = sessionRepository.findByUserIdAndPuzzleId(userId, puzzleId)
                 .orElseThrow(() -> new ValidationException("Active puzzle session not found. Start session first."));
@@ -221,7 +219,7 @@ public class PuzzleService {
     }
 
     @Transactional
-    public String revealHint(UUID userId, UUID puzzleId) {
+    public String revealHint(UUID userId, Long puzzleId) {
         User user = requireUser(userId);
         UserPuzzleSession session = sessionRepository.findByUserIdAndPuzzleId(userId, puzzleId)
                 .orElseThrow(() -> new ValidationException("Session not found"));
@@ -235,8 +233,8 @@ public class PuzzleService {
             throw new ValidationException("Hint limit reached for this puzzle.");
         }
 
-        boolean freeHints = "dragon_warrior_po".equals(user.getEquippedCardId())
-                || "Oogway_legendary".equals(user.getEquippedCardId());
+        boolean freeHints = CardIds.DRAGON_WARRIOR_PO.equals(user.getEquippedCardId())
+                || CardIds.OOGWAY_LEGENDARY.equals(user.getEquippedCardId());
         if (!freeHints) {
             if (user.getCoins() < GameEconomy.HINT_COST_COINS) {
                 throw new ValidationException("Not enough coins for a hint");
@@ -276,7 +274,7 @@ public class PuzzleService {
         // 1) Redis (immutable definition only)
         Optional<DailyPuzzleCacheDto> cached = dailyPuzzleCache.get(date);
         if (cached.isPresent()) {
-            UUID id = cached.get().getPuzzleId();
+            Long id = cached.get().getPuzzleId();
             Optional<Puzzle> fromCache = puzzleRepository.findById(id);
             if (fromCache.isPresent()) {
                 return fromCache.get();
@@ -286,11 +284,163 @@ public class PuzzleService {
         // 2) DailyPuzzle mapping
         Optional<DailyPuzzle> mapping = dailyPuzzleRepository.findByScheduledDateWithPuzzle(date);
         if (mapping.isEmpty()) {
-            // 3) Assign / legacy migrate
-            mapping = Optional.of(puzzleSchedulerJobs.assignDaily(date));
+            // 3) Assign / legacy migrate (may fail while dictionary is still seeding)
+            try {
+                mapping = Optional.of(puzzleSchedulerJobs.assignDaily(date));
+            } catch (IllegalStateException ex) {
+                throw new ResourceNotFoundException(
+                        ErrorCode.PUZZLE_NOT_FOUND,
+                        "Daily puzzle is not ready yet. Please try again in a moment.");
+            }
         }
 
         Puzzle puzzle = mapping.get().getPuzzle();
+        cacheDailyDefinition(date, puzzle);
+        return puzzle;
+    }
+
+    /**
+     * Returns up to {@code limit} playable puzzle definitions for client warm-cache (IDB).
+     * Prefers Redis pool; rebuilds from DB when missing.
+     */
+    @Transactional(readOnly = true)
+    public List<PuzzlePlayDto> getPuzzlePool(PuzzleDifficulty difficulty, int limit) {
+        int n = Math.max(1, Math.min(limit, 10));
+        Optional<List<PuzzlePlayDto>> cached = puzzlePoolCache.get(difficulty);
+        if (cached.isPresent() && !cached.get().isEmpty()) {
+            return cached.get().stream().limit(n).toList();
+        }
+        List<Puzzle> fromDb = puzzleRepository.findUnscheduledPoolByDifficulty(difficulty);
+        if (fromDb.isEmpty()) {
+            fromDb = puzzleRepository.findByDifficulty(difficulty).stream()
+                    .filter(Puzzle::isActive)
+                    .limit(n)
+                    .toList();
+        }
+        List<PuzzlePlayDto> dtos = fromDb.stream()
+                .limit(n)
+                .map(p -> toPlayDto(p, null, false))
+                .toList();
+        if (!dtos.isEmpty()) {
+            puzzlePoolCache.put(difficulty, dtos);
+        }
+        return dtos;
+    }
+
+    /**
+     * Spelling Bee–style sync: client validates locally, then pushes found words.
+     * Server re-validates against snapshot and awards completion XP/coins once.
+     */
+    @Transactional
+    public SyncProgressResponse syncProgress(UUID userId, SyncProgressRequest request) {
+        if (request == null || request.getPuzzleId() == null) {
+            throw new ValidationException("puzzleId is required");
+        }
+        User user = requireUser(userId);
+        Puzzle puzzle = puzzleRepository.findById(request.getPuzzleId())
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.PUZZLE_NOT_FOUND, "Puzzle not found"));
+
+        UserPuzzleSession session = sessionRepository.findByUserIdAndPuzzleId(userId, puzzle.getId())
+                .orElseGet(() -> {
+                    if (!isTodaysDaily(puzzle.getId())) {
+                        ensureChoiceQuota(user);
+                    }
+                    return puzzleSessionFactory.getOrCreate(user, puzzle);
+                });
+
+        if (session.isCompleted()) {
+            int shownXp = session.getXpAwarded() != null ? session.getXpAwarded() : 0;
+            int shownCoins = session.getCoinsAwarded() != null ? session.getCoinsAwarded() : 0;
+            return SyncProgressResponse.builder()
+                    .completed(true)
+                    .score(session.getCurrentScore())
+                    .streak(session.getCurrentStreak())
+                    .foundWords(session.getWordsFound() != null ? session.getWordsFound() : List.of())
+                    .wordsFoundCount(session.getWordsFound() != null ? session.getWordsFound().size() : 0)
+                    .targetWordCount(requiredWords(puzzle))
+                    .xpAwarded(shownXp)
+                    .coinsAwarded(shownCoins)
+                    .totalXp(user.getXp())
+                    .totalCoins(user.getCoins())
+                    .belt(user.getBelt())
+                    .build();
+        }
+
+        Set<String> playable = new HashSet<>(playableWordSet(puzzle));
+        List<String> snapshot = puzzleWordSnapshotService.displayWords(puzzle.getId());
+        for (String w : snapshot) {
+            playable.add(w.toUpperCase(Locale.ROOT));
+        }
+
+        List<Character> letterPool = puzzle.getLetters().stream()
+                .map(s -> s.charAt(0))
+                .collect(Collectors.toList());
+        char center = puzzle.getCenterLetter().charAt(0);
+
+        List<String> accepted = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        List<String> incoming = request.getFoundWords() != null ? request.getFoundWords() : List.of();
+        for (String raw : incoming) {
+            String word = wordNormalizer.normalize(raw).map(wordNormalizer::toDisplay).orElse("");
+            if (word.isEmpty() || !seen.add(word.toUpperCase(Locale.ROOT))) {
+                continue;
+            }
+            boolean letterOk = puzzleValidator.matchesLetterRules(word, letterPool, center);
+            boolean inPuzzle = playable.contains(word.toUpperCase(Locale.ROOT))
+                    || puzzleWordSnapshotService.isPlayableWord(puzzle.getId(), word);
+            if (letterOk && inPuzzle) {
+                accepted.add(word);
+            }
+        }
+
+        int score = 0;
+        int streak = 0;
+        for (String word : accepted) {
+            boolean isPangram = puzzleWordSnapshotService.isPangramSnapshot(puzzle.getId(), word)
+                    || (puzzle.getPangrams() != null
+                    && puzzle.getPangrams().stream().anyMatch(p -> p.equalsIgnoreCase(word)))
+                    || puzzleValidator.isPangram(word, letterPool);
+            int points = scoreCalculator.calculateWordPoints(
+                    word, isPangram, streak, user.getEquippedCardId(), center);
+            score += points + (isPangram ? 75 : 0);
+            streak++;
+        }
+
+        session.setWordsFound(accepted);
+        session.setCurrentScore(score);
+        session.setCurrentStreak(streak);
+
+        int xpAwarded = 0;
+        int coinsAwarded = 0;
+        int required = requiredWords(puzzle);
+        if (accepted.size() >= required) {
+            int[] rewards = completeSession(session, user);
+            xpAwarded = rewards[0];
+            coinsAwarded = rewards[1];
+        }
+
+        sessionRepository.save(session);
+        userRepository.save(user);
+        achievementService.evaluateAndUnlock(userId);
+
+        return SyncProgressResponse.builder()
+                .completed(session.isCompleted())
+                .score(session.getCurrentScore())
+                .streak(session.getCurrentStreak())
+                .foundWords(accepted)
+                .wordsFoundCount(accepted.size())
+                .targetWordCount(required)
+                .xpAwarded(xpAwarded)
+                .coinsAwarded(coinsAwarded)
+                .totalXp(user.getXp())
+                .totalCoins(user.getCoins())
+                .belt(user.getBelt())
+                .build();
+    }
+
+    private void cacheDailyDefinition(LocalDate date, Puzzle puzzle) {
+        List<String> words = resolvePlayableWords(puzzle);
+        List<String> pangrams = resolvePangrams(puzzle);
         dailyPuzzleCache.put(date, DailyPuzzleCacheDto.builder()
                 .puzzleId(puzzle.getId())
                 .difficulty(puzzle.getDifficulty().name())
@@ -301,11 +451,13 @@ public class PuzzleService {
                 .scheduledDate(date.toString())
                 .xpReward(puzzle.getXpReward())
                 .coinReward(puzzle.getCoinReward())
+                .validWords(words)
+                .pangrams(pangrams)
+                .pangramCount(pangrams.size())
                 .build());
-        return puzzle;
     }
 
-    private boolean isTodaysDaily(UUID puzzleId) {
+    private boolean isTodaysDaily(Long puzzleId) {
         return dailyPuzzleRepository.findByScheduledDate(gameClock.today())
                 .map(d -> d.getPuzzle().getId().equals(puzzleId))
                 .orElseGet(() -> puzzleRepository.findByPuzzleDate(gameClock.today())
@@ -326,25 +478,41 @@ public class PuzzleService {
 
     private int[] completeSession(UserPuzzleSession session, User user) {
         if (session.isCompleted()) {
-            return new int[]{0, 0}; // idempotent
+            return new int[]{
+                    session.getXpAwarded() != null ? session.getXpAwarded() : 0,
+                    session.getCoinsAwarded() != null ? session.getCoinsAwarded() : 0
+            };
         }
         session.setCompleted(true);
         session.setCompletedAt(LocalDateTime.now());
 
         Puzzle puzzle = session.getPuzzle();
-        int baseXp = puzzle.getXpReward();
-        int baseCoins = puzzle.getCoinReward();
 
-        int rewardXp = cardBonusEvaluator.applyXpModifier(baseXp, user.getEquippedCardId(), puzzle.getDifficulty());
-        int rewardCoins = cardBonusEvaluator.applyCoinModifier(baseCoins, user.getEquippedCardId(), 0);
+        // Any completed puzzle counts toward the calendar day streak (once per day).
+        applyDailyCompletionStreak(user);
+
+        int[] rewards = computeCompletionRewards(session, user);
+        int rewardXp = rewards[0];
+        int rewardCoins = rewards[1];
 
         user.setXp(user.getXp() + rewardXp);
         user.setCoins(user.getCoins() + rewardCoins);
+        session.setXpAwarded(rewardXp);
+        session.setCoinsAwarded(rewardCoins);
+
         user.getStats().setPuzzlesCompleted(user.getStats().getPuzzlesCompleted() + 1);
         user.getStats().setWordsFound(
-                user.getStats().getWordsFound() + session.getWordsFound().size());
+                user.getStats().getWordsFound()
+                        + (session.getWordsFound() != null ? session.getWordsFound().size() : 0));
         if (session.getCurrentScore() > user.getStats().getHighestScore()) {
             user.getStats().setHighestScore(session.getCurrentScore());
+        }
+        int pangramsFound = countPangramsFound(session, puzzle);
+        if (pangramsFound > 0) {
+            user.getStats().setPangramsFound(user.getStats().getPangramsFound() + pangramsFound);
+        }
+        if (isPerfectClear(session, puzzle)) {
+            user.getStats().setPerfectPuzzles(user.getStats().getPerfectPuzzles() + 1);
         }
 
         if (!isTodaysDaily(puzzle.getId())) {
@@ -354,8 +522,6 @@ public class PuzzleService {
                 user.setChoicePuzzlesCompletedToday(0);
             }
             user.setChoicePuzzlesCompletedToday(user.getChoicePuzzlesCompletedToday() + 1);
-        } else {
-            user.setLastPuzzleDate(gameClock.today().toString());
         }
 
         var progress = progressionService.resolve(user.getXp());
@@ -365,6 +531,104 @@ public class PuzzleService {
         leaderboardService.updateScore(user.getUsername(), user.getXp());
         cardService.consumeEquippedCharge(user.getId());
         return new int[]{rewardXp, rewardCoins};
+    }
+
+    /**
+     * First puzzle completed on a calendar day increments daily streak by 1.
+     * Consecutive days continue the streak; a gap resets to 1. Shields are not consumed here.
+     */
+    private void applyDailyCompletionStreak(User user) {
+        String today = gameClock.today().toString();
+        if (today.equals(user.getLastPuzzleDate())) {
+            return;
+        }
+        LocalDate todayDate = gameClock.today();
+        LocalDate lastDate = null;
+        if (user.getLastPuzzleDate() != null && !user.getLastPuzzleDate().isBlank()) {
+            try {
+                lastDate = LocalDate.parse(user.getLastPuzzleDate());
+            } catch (Exception ignored) {
+                lastDate = null;
+            }
+        }
+        if (lastDate != null && lastDate.equals(todayDate.minusDays(1))) {
+            user.setDailyStreak(user.getDailyStreak() + 1);
+        } else {
+            user.setDailyStreak(1);
+        }
+        user.setCurrentStreak(user.getDailyStreak());
+        user.setLastPuzzleDate(today);
+        user.getStats().setDaysPlayed(user.getStats().getDaysPlayed() + 1);
+        if (user.getDailyStreak() > user.getStats().getHighestStreak()) {
+            user.getStats().setHighestStreak(user.getDailyStreak());
+        }
+    }
+
+    /**
+     * Aligns with frontend {@code calculateRewards}: difficulty base + pangram + perfect + day streak + star tier.
+     */
+    private int[] computeCompletionRewards(UserPuzzleSession session, User user) {
+        Puzzle puzzle = session.getPuzzle();
+        var fixed = switch (puzzle.getDifficulty()) {
+            case EASY -> GameEconomy.difficulty("Easy");
+            case MEDIUM -> GameEconomy.difficulty("Medium");
+            case HARD -> GameEconomy.difficulty("Hard");
+            case EXPERT -> GameEconomy.difficulty("Expert");
+        };
+        int baseXp = Math.max(puzzle.getXpReward(), fixed.baseXp());
+        int baseCoins = Math.max(puzzle.getCoinReward(), fixed.baseCoins());
+
+        int pangramsFound = countPangramsFound(session, puzzle);
+        int pangramXp = pangramsFound * GameEconomy.PANGRAM_BONUS_XP;
+        int pangramCoins = pangramsFound * GameEconomy.PANGRAM_BONUS_COINS;
+
+        boolean perfect = isPerfectClear(session, puzzle);
+        int perfectXp = perfect ? GameEconomy.PERFECT_CLEAR_XP : 0;
+        int perfectCoins = perfect ? GameEconomy.PERFECT_CLEAR_COINS : 0;
+
+        int streakDays = Math.min(Math.max(user.getDailyStreak(), 0), GameEconomy.DAY_STREAK_BONUS_CAP);
+        int streakXp = streakDays * GameEconomy.DAY_STREAK_XP_PER;
+        int streakCoins = streakDays * GameEconomy.DAY_STREAK_COINS_PER;
+
+        int stars = cardService.starsForCard(user.getEquippedCardId());
+        var tier = GameEconomy.starTier(stars);
+        int characterXp = (int) Math.round(baseXp * tier.xpBonus());
+        int characterCoins = (int) Math.round(baseCoins * tier.coinBonus());
+
+        int hintsUsed = session.getHintedWords() != null ? session.getHintedWords().size() : 0;
+        int xp = baseXp + pangramXp + perfectXp + streakXp + characterXp;
+        int hintPenalty = hintsUsed > 0
+                ? (int) Math.round(xp * (GameEconomy.HINT_XP_PENALTY_PERCENT / 100.0))
+                : 0;
+        xp = Math.max(0, xp - hintPenalty);
+        int coins = baseCoins + pangramCoins + perfectCoins + streakCoins + characterCoins;
+        return new int[]{xp, coins};
+    }
+
+    private int countPangramsFound(UserPuzzleSession session, Puzzle puzzle) {
+        if (session.getWordsFound() == null || session.getWordsFound().isEmpty()) {
+            return 0;
+        }
+        Set<String> found = session.getWordsFound().stream()
+                .map(w -> w.toUpperCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        int count = 0;
+        if (puzzle.getPangrams() != null) {
+            for (String p : puzzle.getPangrams()) {
+                if (p != null && found.contains(p.toUpperCase(Locale.ROOT))) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    private boolean isPerfectClear(UserPuzzleSession session, Puzzle puzzle) {
+        int found = session.getWordsFound() != null ? session.getWordsFound().size() : 0;
+        int total = Math.max(
+                (int) puzzleWordSnapshotService.countWords(puzzle.getId()),
+                puzzle.getValidWords() != null ? puzzle.getValidWords().size() : 0);
+        return total > 0 && found >= total;
     }
 
     private User requireUser(UUID userId) {
@@ -402,6 +666,8 @@ public class PuzzleService {
     }
 
     private PuzzlePlayDto toPlayDto(Puzzle puzzle, LocalDate scheduledDate, boolean daily) {
+        List<String> words = resolvePlayableWords(puzzle);
+        List<String> pangrams = resolvePangrams(puzzle);
         return PuzzlePlayDto.builder()
                 .id(puzzle.getId())
                 .difficulty(puzzle.getDifficulty())
@@ -411,12 +677,48 @@ public class PuzzleService {
                         ? puzzle.getMinimumWordLength()
                         : GameEconomy.MIN_WORD_LENGTH)
                 .targetWordCount(requiredWords(puzzle))
-                .pangramCount(safePangramCount(puzzle))
+                .pangramCount(Math.max(safePangramCount(puzzle), pangrams.size()))
+                .validWords(words)
+                .pangrams(pangrams)
                 .xpReward(puzzle.getXpReward())
                 .coinReward(puzzle.getCoinReward())
                 .scheduledDate(scheduledDate)
                 .daily(daily)
                 .build();
+    }
+
+    private List<String> resolvePlayableWords(Puzzle puzzle) {
+        List<String> fromSnapshot = puzzleWordSnapshotService.displayWords(puzzle.getId());
+        if (!fromSnapshot.isEmpty()) {
+            return fromSnapshot.stream()
+                    .map(w -> w.toUpperCase(Locale.ROOT))
+                    .distinct()
+                    .sorted()
+                    .toList();
+        }
+        if (puzzle.getValidWords() == null) {
+            return List.of();
+        }
+        return puzzle.getValidWords().stream()
+                .map(w -> w.toUpperCase(Locale.ROOT))
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private List<String> resolvePangrams(Puzzle puzzle) {
+        if (puzzle.getPangrams() != null && !puzzle.getPangrams().isEmpty()) {
+            return puzzle.getPangrams().stream()
+                    .map(w -> w.toUpperCase(Locale.ROOT))
+                    .distinct()
+                    .toList();
+        }
+        List<Character> pool = puzzle.getLetters().stream()
+                .map(s -> s.charAt(0))
+                .collect(Collectors.toList());
+        return resolvePlayableWords(puzzle).stream()
+                .filter(w -> puzzleValidator.isPangram(w, pool))
+                .toList();
     }
 
     private PuzzleProgressDto toProgressDto(UserPuzzleSession session, Puzzle puzzle) {

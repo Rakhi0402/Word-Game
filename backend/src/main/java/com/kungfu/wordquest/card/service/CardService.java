@@ -21,7 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -41,29 +43,55 @@ public class CardService {
                 .toList();
     }
 
+    /** Star tier for reward math (defaults to 1). */
+    @Transactional(readOnly = true)
+    public int starsForCard(String cardId) {
+        if (cardId == null || cardId.isBlank()) {
+            return 1;
+        }
+        return cardRepository.findById(cardId).map(Card::getStars).orElse(1);
+    }
+
     @Transactional(readOnly = true)
     public CollectionResponse getCollection(UUID userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND, "User not found"));
 
-        List<UserCard> owned = userCardRepository.findByUserIdWithCard(userId);
+        List<UserCard> ownedRows = userCardRepository.findByUserIdWithCard(userId);
+        Map<String, UserCard> ownedById = new HashMap<>();
+        for (UserCard uc : ownedRows) {
+            if (uc.getCard() != null) {
+                ownedById.put(uc.getCard().getId(), uc);
+            }
+        }
         String equippedId = user.getEquippedCardId();
 
-        List<CollectionCardDto> cards = new ArrayList<>(owned.size());
-        for (UserCard uc : owned) {
-            Card card = uc.getCard();
+        // Full catalog so the Scrolls page can show locked + unlocked cards.
+        List<Card> catalog = cardRepository.findAll().stream()
+                .sorted(Comparator.comparing(Card::getId))
+                .toList();
+
+        List<CollectionCardDto> cards = new ArrayList<>(catalog.size());
+        for (Card card : catalog) {
+            UserCard uc = ownedById.get(card.getId());
+            boolean owned = uc != null;
+            int charges = owned
+                    ? Math.max(0, uc.getChargesRemaining())
+                    : GameEconomy.starTier(card.getStars()).charges();
+            String status = owned
+                    ? (uc.getStatus() != null ? uc.getStatus() : "available")
+                    : "locked";
             cards.add(CollectionCardDto.builder()
                     .id(card.getId())
-                    .owned(true)
-                    .quantity(uc.getCount())
-                    .equipped(card.getId().equals(equippedId))
-                    .chargesRemaining(Math.max(0, uc.getChargesRemaining()))
-                    .status(uc.getStatus())
-                    .acquiredAt(uc.getAcquiredAt())
+                    .owned(owned)
+                    .quantity(owned ? uc.getCount() : 0)
+                    .equipped(owned && card.getId().equals(equippedId))
+                    .chargesRemaining(charges)
+                    .status(status)
+                    .acquiredAt(owned ? uc.getAcquiredAt() : null)
                     .definition(toDefinition(card))
                     .build());
         }
-        cards.sort(Comparator.comparing(CollectionCardDto::getId));
 
         return CollectionResponse.builder()
                 .cards(cards)

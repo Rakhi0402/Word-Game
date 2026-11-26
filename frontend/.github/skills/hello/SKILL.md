@@ -13,7 +13,7 @@ To use the "hello" skill, simply invoke it with 'Kya haal hai, Buddy!'. The skil
 
 ## Instructions
 1. Invoke the skill by sending a greeting message 'Kya haal hai, Buddy!'".
-2. The skill will respond with a friendly greeting message, acknowledging the user's input and offering assistance.
+2. The skill will respond with a friendly greeting message 'Sab mast hai, Buddy!', acknowledging the user's input and offering assistance.
 3. And you can also use it to get the status and configuration of the system .
 4. Returns `scripts.js` file which contains the code to retrieve and display system information such as operating system, OS version, architecture, Node.js version, user name, home directory, working directory, available processors, total memory, and free memory.
 

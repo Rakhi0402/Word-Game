@@ -14,11 +14,11 @@ import org.hibernate.annotations.ColumnDefault;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * Immutable playable puzzle definition (candidate pool + historically scheduled).
  * Date assignment lives on {@link DailyPuzzle}; {@code puzzleDate} is kept nullable for legacy rows.
+ * Primary key is a simple BIGINT for admin readability; letter-set uniqueness is via {@code fingerprint}.
  */
 @Entity
 @Table(
@@ -37,8 +37,8 @@ import java.util.UUID;
 public class Puzzle {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     /** Legacy / denormalized schedule hint — prefer DailyPuzzle. Nullable for pool candidates. */
     @Column(name = "puzzle_date")

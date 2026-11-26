@@ -13,15 +13,15 @@ import java.util.UUID;
 @Repository
 public interface PuzzleWordRepository extends JpaRepository<PuzzleWord, UUID> {
 
-    boolean existsByPuzzleIdAndNormalizedWord(UUID puzzleId, String normalizedWord);
+    boolean existsByPuzzleIdAndNormalizedWord(Long puzzleId, String normalizedWord);
 
-    Optional<PuzzleWord> findByPuzzleIdAndNormalizedWord(UUID puzzleId, String normalizedWord);
+    Optional<PuzzleWord> findByPuzzleIdAndNormalizedWord(Long puzzleId, String normalizedWord);
 
-    List<PuzzleWord> findByPuzzleId(UUID puzzleId);
+    List<PuzzleWord> findByPuzzleId(Long puzzleId);
 
-    long countByPuzzleId(UUID puzzleId);
+    long countByPuzzleId(Long puzzleId);
 
     @Modifying(clearAutomatically = true)
     @Query("DELETE FROM PuzzleWord pw WHERE pw.puzzle.id = :puzzleId")
-    void deleteAllByPuzzleId(@Param("puzzleId") UUID puzzleId);
+    void deleteAllByPuzzleId(@Param("puzzleId") Long puzzleId);
 }

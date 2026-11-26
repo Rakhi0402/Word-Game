@@ -13,12 +13,13 @@ import {
 import { refreshDailyHints, resetPuzzleHintCounters } from '../store/cardsSlice';
 import {
   clearBonusFreeHintsNextDay,
+  incrementChoicePuzzlesToday,
   setLastPuzzleMeta,
   syncChoicePuzzlesDay,
 } from '../store/userSlice';
 
 import { puzzleService } from '../services/puzzleService';
-import { todayKey } from '../utils/mockProgress';
+import { todayKey } from '../services/cache/cacheKeys';
 import type { PuzzleDifficulty } from '../types';
 import { MAX_CHOICE_PUZZLES_PER_DAY } from '../constants/rewards';
 
@@ -47,6 +48,7 @@ export const Puzzle: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [screen, setScreen] = useState<Screen>('loading');
+  const [choiceError, setChoiceError] = useState<string | null>(null);
   const [initDone, setInitDone] = useState(false);
   const [asidePanel, setAsidePanel] = useState<AsidePanel>('none');
   const puzzleInputRef = useRef<PuzzleInputHandle>(null);
@@ -82,9 +84,10 @@ export const Puzzle: React.FC = () => {
     const boot = async () => {
       setLoading(true);
       try {
-        const dailyRes = await puzzleService.getDailyPuzzle();
+        // Bypass stale IndexedDB so a fresh daily assignment is always seen.
+        const dailyRes = await puzzleService.getDailyPuzzle({ force: true });
         if (!dailyRes.success || !dailyRes.data) {
-          setScreen('quota_done');
+          setScreen(liveChoiceRemaining > 0 ? 'choice' : 'quota_done');
           setLoading(false);
           setInitDone(true);
           return;
@@ -119,7 +122,8 @@ export const Puzzle: React.FC = () => {
           setScreen('quota_done');
         }
       } catch {
-        setScreen('quota_done');
+        // Daily may still be generating — still offer difficulty trials.
+        setScreen(liveChoiceRemaining > 0 ? 'choice' : 'quota_done');
       }
 
       setLoading(false);
@@ -135,11 +139,15 @@ export const Puzzle: React.FC = () => {
       setScreen('quota_done');
       return;
     }
+    setChoiceError(null);
     setLoading(true);
     try {
-      const res = await puzzleService.getPuzzleByDifficulty(difficulty);
+      const res = await puzzleService.getPuzzleByDifficulty(difficulty, { force: true });
       if (!res.success || !res.data) {
-        setScreen('quota_done');
+        setChoiceError(
+          `No unused ${difficulty} puzzles left in the pool. Generate more in Admin → Puzzles, or try another difficulty.`
+        );
+        setScreen('choice');
         return;
       }
       dispatch(resetPuzzleState(undefined));
@@ -147,9 +155,13 @@ export const Puzzle: React.FC = () => {
       await puzzleService.startSession(res.data.id);
       dispatch(loadPuzzle({ puzzle: res.data, isDailySession: false }));
       dispatch(setLastPuzzleMeta({ date: todayKey(), difficulty }));
+      dispatch(incrementChoicePuzzlesToday(todayKey()));
       setScreen('play');
     } catch {
-      setScreen('quota_done');
+      setChoiceError(
+        `Could not start a ${difficulty} puzzle (none available or already completed). Try another difficulty.`
+      );
+      setScreen('choice');
     }
     setLoading(false);
   };
@@ -222,26 +234,42 @@ export const Puzzle: React.FC = () => {
 
   if (screen === 'choice') {
     return (
-      <DifficultySelect
-        onSelect={(d) => void startChoiceDifficulty(d)}
-        remainingToday={liveChoiceRemaining}
-        mode={dailyDoneToday ? 'extra' : 'first'}
-        onViewDaily={dailyDoneToday ? () => void viewDailyResult() : undefined}
-      />
+      <div className="space-y-3">
+        {choiceError && (
+          <p className="mx-auto max-w-lg rounded border border-red-500/40 bg-red-950/40 px-3 py-2 text-center text-sm text-red-200">
+            {choiceError}
+          </p>
+        )}
+        <DifficultySelect
+          onSelect={(d) => void startChoiceDifficulty(d)}
+          remainingToday={liveChoiceRemaining}
+          mode={dailyDoneToday ? 'extra' : 'first'}
+          onViewDaily={dailyDoneToday ? () => void viewDailyResult() : undefined}
+        />
+      </div>
     );
   }
 
   if (screen === 'quota_done') {
+    const dailyReady = Boolean(store.getState().dashboard.data?.dailyQuest?.puzzleId);
     return (
       <Card variant="wood" className="mx-auto max-w-lg space-y-4 p-6 text-center">
         <h2 className="font-martial text-2xl font-extrabold uppercase tracking-wider text-gold">
-          Quests Complete
+          {dailyDoneToday ? 'Quests Complete' : 'Quest Desk'}
         </h2>
         <p className="text-sm text-parchment/70">
-          Today&apos;s featured daily scroll is complete
-          {liveChoiceRemaining > 0
-            ? `. You still have ${liveChoiceRemaining} extra difficulty trial${liveChoiceRemaining === 1 ? '' : 's'} today.`
-            : '. Come back tomorrow for a new daily scroll.'}
+          {dailyDoneToday
+            ? `Today's featured daily scroll is complete${
+                liveChoiceRemaining > 0
+                  ? `. You still have ${liveChoiceRemaining} extra difficulty trial${liveChoiceRemaining === 1 ? '' : 's'} today.`
+                  : '. Come back tomorrow for a new daily scroll.'
+              }`
+            : dailyReady
+              ? 'Unable to open today’s daily scroll right now.'
+              : 'Today’s daily scroll is still being prepared by the dojo.'}
+          {!dailyDoneToday && liveChoiceRemaining > 0
+            ? ` You can still play ${liveChoiceRemaining} difficulty trial${liveChoiceRemaining === 1 ? '' : 's'} today.`
+            : ''}
         </p>
         {liveChoiceRemaining > 0 && (
           <Button variant="primary" onClick={() => setScreen('choice')}>

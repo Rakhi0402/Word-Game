@@ -5,6 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Trophy } from 'lucide-react';
 import { BELT_LEVELS } from '../constants';
 import { Button } from '../components/ui/Button';
+import { playerAvatarUrl } from '../utils/playerAvatar';
 
 export const Leaderboard: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -24,22 +25,13 @@ export const Leaderboard: React.FC = () => {
   const secondPlace = leaderboard.entries.find((e) => e.rank === 2);
   const thirdPlace = leaderboard.entries.find((e) => e.rank === 3);
 
-  const renderPodiumAvatar = (name: string) => {
-    switch (name) {
-      case 'Grand Master Oogway':
-        return '🐢';
-      case 'Master Shifu':
-        return '🦊';
-      case 'Master Tigress':
-        return '🐯';
-      case 'Master Viper':
-        return '🐍';
-      case 'Master Monkey':
-        return '🐒';
-      default:
-        return '🐼';
-    }
-  };
+  const renderPodiumAvatar = (name: string) => (
+    <img
+      src={playerAvatarUrl(null, name)}
+      alt={name}
+      className="h-14 w-14 rounded-full border-2 border-gold object-cover shadow"
+    />
+  );
 
   if (leaderboard.loading && leaderboard.entries.length === 0) {
     return (
@@ -82,7 +74,7 @@ export const Leaderboard: React.FC = () => {
         {secondPlace && (
           <div className="flex flex-col items-center space-y-2 order-1">
             <div className="text-center relative">
-              <span className="text-3xl filter drop-shadow animate-float block">
+              <span className="filter drop-shadow animate-float block">
                 {renderPodiumAvatar(secondPlace.username)}
               </span>
               <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-slate-300 border-2 border-parchment font-black text-[10px] text-slate-800">
@@ -107,7 +99,7 @@ export const Leaderboard: React.FC = () => {
               👑
             </div>
             <div className="text-center relative">
-              <span className="text-4xl filter drop-shadow animate-float block">
+              <span className="filter drop-shadow animate-float block">
                 {renderPodiumAvatar(firstPlace.username)}
               </span>
               <span className="absolute -top-2 -right-2 flex h-7 w-7 items-center justify-center rounded-full bg-gold border-2 border-parchment font-black text-xs text-jade-dark shadow">
@@ -129,7 +121,7 @@ export const Leaderboard: React.FC = () => {
         {thirdPlace && (
           <div className="flex flex-col items-center space-y-2 order-3">
             <div className="text-center relative">
-              <span className="text-3xl filter drop-shadow animate-float block">
+              <span className="filter drop-shadow animate-float block">
                 {renderPodiumAvatar(thirdPlace.username)}
               </span>
               <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-amber-600 border-2 border-parchment font-black text-[10px] text-white">
@@ -198,9 +190,11 @@ export const Leaderboard: React.FC = () => {
                     </td>
 
                     <td className="py-4 px-4 flex items-center space-x-2">
-                      <span className="text-lg filter drop-shadow">
-                        {renderPodiumAvatar(entry.username)}
-                      </span>
+                      <img
+                        src={playerAvatarUrl(null, entry.username)}
+                        alt={entry.username}
+                        className="h-8 w-8 rounded-full border border-gold object-cover"
+                      />
                       <div>
                         <span className="truncate max-w-[140px] sm:max-w-none block tracking-wide">
                           {entry.username}

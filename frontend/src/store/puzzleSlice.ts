@@ -4,7 +4,7 @@ import { DIFFICULTY_CONFIG, MAX_WORD_INPUT_LENGTH } from '../constants/rewards';
 import { isPangramFromLetters } from '../utils/pangram';
 
 interface PuzzleState {
-  activePuzzleId: string | null;
+  activePuzzleId: number | null;
   letters: string[];
   centerLetter: string;
   outerLetters: string[];
@@ -90,14 +90,17 @@ const puzzleSlice = createSlice({
       state.outerLetters = shuffleArray(outer);
       state.letters = [puzzle.centerLetter, ...state.outerLetters];
       state.currentWord = '';
-      state.validWords = [];
+      const answers = (puzzle.validWords || []).map((w) => w.toUpperCase());
+      state.validWords = answers;
       const letterPool = puzzle.letters || [];
+      const pangramList = (puzzle.pangrams || []).map((w) => w.toUpperCase());
       const found = (puzzle.foundWords || []).map((text) => {
         const upper = text.toUpperCase();
         return {
           text: upper,
           score: 0,
-          isPangram: isPangramFromLetters(upper, letterPool),
+          isPangram:
+            pangramList.includes(upper) || isPangramFromLetters(upper, letterPool),
         };
       });
       state.wordsFound = found;
@@ -115,10 +118,13 @@ const puzzleSlice = createSlice({
         ruleTarget
       );
       state.requiredWordsToComplete = target;
-      state.totalValidWordsCount = target;
-      state.totalValidWords = target;
-      state.pangrams = [];
-      state.totalPangrams = Math.max(0, puzzle.pangramCount ?? 0);
+      state.totalValidWordsCount = answers.length > 0 ? answers.length : target;
+      state.totalValidWords = state.totalValidWordsCount;
+      state.pangrams = pangramList;
+      state.totalPangrams = Math.max(
+        0,
+        puzzle.pangramCount ?? pangramList.length
+      );
       state.pangramsFound = found.filter((w) => w.isPangram).map((w) => w.text);
       state.lastRejectedWord = null;
       state.lastRejectedReason = null;
@@ -158,26 +164,36 @@ const puzzleSlice = createSlice({
         }
       >
     ) => {
-      state.wordsFound.push({
-        text: action.payload.text,
-        score: action.payload.score,
-        isPangram: action.payload.isPangram,
-      });
-      state.streak += 1;
-      // Server points are authoritative (already include streak/card bonuses).
-      state.score += action.payload.score;
-      if (action.payload.isPangram) {
-        state.pangramsFound.push(action.payload.text);
+      const text = (action.payload.text || '').trim();
+      if (text) {
+        state.wordsFound.push({
+          text,
+          score: action.payload.score,
+          isPangram: action.payload.isPangram,
+        });
+        state.streak += 1;
+        // Points include local streak / pangram estimate; server sync reconciles.
+        state.score += action.payload.score;
+        if (action.payload.isPangram) {
+          state.pangramsFound.push(text);
+        }
       }
       state.currentWord = '';
       state.lastRejectedWord = null;
       state.lastRejectedReason = null;
       if (action.payload.serverCompleted) {
         state.completed = true;
-        state.pendingServerRewards = {
-          xp: action.payload.xpAwarded ?? 0,
-          coins: action.payload.coinsAwarded ?? 0,
-        };
+        const xp = action.payload.xpAwarded ?? 0;
+        const coins = action.payload.coinsAwarded ?? 0;
+        // Never clobber a real award with a later idempotent 0-sync.
+        if (
+          xp > 0 ||
+          coins > 0 ||
+          !state.pendingServerRewards ||
+          (state.pendingServerRewards.xp === 0 && state.pendingServerRewards.coins === 0)
+        ) {
+          state.pendingServerRewards = { xp, coins };
+        }
       }
     },
     revealHint: (state) => {
@@ -242,7 +258,10 @@ const puzzleSlice = createSlice({
       state.outerLetters = outer;
       state.letters = [puzzle.centerLetter, ...outer];
       state.currentWord = '';
-      state.validWords = [];
+      state.validWords = (action.payload.puzzle.validWords || []).map((w) =>
+        w.toUpperCase()
+      );
+      state.pangrams = (action.payload.puzzle.pangrams || []).map((w) => w.toUpperCase());
       state.wordsFound = action.payload.wordsFound;
       state.hintedWords = action.payload.hintedWords;
       state.score = action.payload.score;

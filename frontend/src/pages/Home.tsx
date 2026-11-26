@@ -17,7 +17,15 @@ export const Home: React.FC = () => {
   const cards = useAppSelector((s) => s.cards);
 
   useEffect(() => {
-    void dispatch(fetchDashboard());
+    // Force once on Home so a newly assigned daily puzzle is visible after DB bootstrap.
+    void dispatch(fetchDashboard({ force: true }));
+    // Warm IDB: daily puzzle + difficulty pools (Spelling Bee–style local play).
+    void import('../services/puzzleService').then(({ puzzleService }) => {
+      void puzzleService.getDailyPuzzle({ force: true }).catch(() => undefined);
+      for (const d of ['Easy', 'Medium', 'Hard', 'Expert'] as const) {
+        void puzzleService.warmPuzzlePool(d).catch(() => undefined);
+      }
+    });
   }, [dispatch]);
 
   const data = dashboard.data;
@@ -214,7 +222,11 @@ export const Home: React.FC = () => {
             className="shrink-0 animate-lantern 8s ease-in-out infinite"
             disabled={daily?.completed === true}
           >
-            {daily?.completed ? 'Completed' : 'Enter Quest ➔'}
+            {daily?.completed
+              ? 'Completed'
+              : daily?.available === false && !daily?.puzzleId
+                ? 'Prepare Quest ➔'
+                : 'Enter Quest ➔'}
           </Button>
         </div>
       </Card>

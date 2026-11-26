@@ -7,3 +7,10 @@
 /frontend.zip
 /frontend/scripts/
 /backend/docs/
+.env
+.env.local
+*.pem
+.DS_Store
+node_modules/
+frontend/dist/
+backend/target/

@@ -38,4 +38,3 @@ bin/
 target/
 /.idea/
 /.junie/
-/docker-compose.yml

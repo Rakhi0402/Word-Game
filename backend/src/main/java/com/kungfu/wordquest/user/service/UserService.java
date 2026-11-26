@@ -3,8 +3,11 @@ package com.kungfu.wordquest.user.service;
 import com.kungfu.wordquest.card.entity.UserCard;
 import com.kungfu.wordquest.card.repository.CardRepository;
 import com.kungfu.wordquest.card.repository.UserCardRepository;
+import com.kungfu.wordquest.common.constants.CardIds;
 import com.kungfu.wordquest.economy.GameEconomy;
 import com.kungfu.wordquest.leaderboard.service.LeaderboardService;
+import com.kungfu.wordquest.puzzle.repository.UserPuzzleSessionRepository;
+import com.kungfu.wordquest.reward.repository.UserAchievementRepository;
 import com.kungfu.wordquest.user.entity.User;
 import com.kungfu.wordquest.user.entity.UserStats;
 import com.kungfu.wordquest.user.repository.UserRepository;
@@ -22,6 +25,8 @@ public class UserService {
     private final UserRepository userRepository;
     private final CardRepository cardRepository;
     private final UserCardRepository userCardRepository;
+    private final UserAchievementRepository userAchievementRepository;
+    private final UserPuzzleSessionRepository userPuzzleSessionRepository;
     private final LeaderboardService leaderboardService;
 
     @Transactional(readOnly = true)
@@ -49,7 +54,7 @@ public class UserService {
         user.setChoicePuzzlesDate(null);
         user.setChoicePuzzlesCompletedToday(0);
         user.setLastPlayed(LocalDateTime.now());
-        user.setEquippedCardId("po_common");
+        user.setEquippedCardId(CardIds.PO_COMMON);
 
         UserStats stats = user.getStats();
         if (stats != null) {
@@ -67,10 +72,12 @@ public class UserService {
             stats.setGamesPlayed(0);
         }
 
+        userAchievementRepository.deleteAllByUserId(userId);
+        userPuzzleSessionRepository.deleteAllByUserId(userId);
         // Flush delete so re-inserting po_common does not hit unique (user_id, card_id).
         userCardRepository.deleteAllByUserId(userId);
 
-        cardRepository.findById("po_common").ifPresent(card -> {
+        cardRepository.findById(CardIds.PO_COMMON).ifPresent(card -> {
             int charges = GameEconomy.starTier(card.getStars()).charges();
             UserCard userCard = UserCard.builder()
                     .user(user)

@@ -8,6 +8,7 @@ import com.kungfu.wordquest.common.exception.ResourceNotFoundException;
 import com.kungfu.wordquest.economy.ProgressionService;
 import com.kungfu.wordquest.profile.dto.ProfileResponse;
 import com.kungfu.wordquest.profile.service.ProfileService;
+import com.kungfu.wordquest.puzzle.repository.UserPuzzleSessionRepository;
 import com.kungfu.wordquest.reward.entity.Achievement;
 import com.kungfu.wordquest.reward.entity.UserAchievement;
 import com.kungfu.wordquest.reward.repository.AchievementRepository;
@@ -29,6 +30,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -40,6 +43,7 @@ class ProfileServiceTest {
     @Mock UserCardRepository userCardRepository;
     @Mock AchievementRepository achievementRepository;
     @Mock UserAchievementRepository userAchievementRepository;
+    @Mock UserPuzzleSessionRepository userPuzzleSessionRepository;
     @Spy ProgressionService progressionService = new ProgressionService();
 
     @InjectMocks ProfileService profileService;
@@ -117,6 +121,11 @@ class ProfileServiceTest {
                         .chargesRemaining(4)
                         .status("available")
                         .build()));
+        when(userPuzzleSessionRepository.findCompletedAtSince(eq(userId), any(LocalDateTime.class)))
+                .thenReturn(List.of(
+                        LocalDateTime.of(2026, 8, 9, 10, 0),
+                        LocalDateTime.of(2026, 8, 8, 9, 0)
+                ));
 
         ProfileResponse profile = profileService.getProfile(userId);
 
@@ -134,7 +143,7 @@ class ProfileServiceTest {
         assertEquals(2, profile.getStreak().getShields());
         assertEquals(9, profile.getStreak().getLongest());
         assertEquals("2026-08-09", profile.getStreak().getLastCompletedDate());
-        assertTrue(profile.getStreak().getRecentTrainingDays().isEmpty());
+        assertEquals(List.of("2026-08-09", "2026-08-08"), profile.getStreak().getRecentTrainingDays());
 
         assertEquals(12, profile.getStatistics().getWordsFound());
         assertEquals(3, profile.getStatistics().getCardsCollected());

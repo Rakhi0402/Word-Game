@@ -5,7 +5,8 @@ import { Card } from '../components/ui/Card';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
-import { CHARACTER_CARDS, BELT_LEVELS } from '../constants';
+import { CHARACTER_CARDS, BELT_LEVELS, DEFAULT_ACHIEVEMENTS } from '../constants';
+import { playerAvatarUrl } from '../utils/playerAvatar';
 import {
   Zap,
   Scroll,
@@ -23,13 +24,18 @@ import {
 export const Profile: React.FC = () => {
   const dispatch = useAppDispatch();
   const user = useAppSelector((state) => state.user);
+  const auth = useAppSelector((state) => state.auth);
   const cards = useAppSelector((state) => state.cards);
   const achievementsState = useAppSelector((state) => state.achievements);
   const profile = useAppSelector((state) => state.profile);
-  const completedAchievements = achievementsState.achievements.filter((a) => a.unlocked).length;
+  const displayAchievements =
+    achievementsState.achievements.length > 0
+      ? achievementsState.achievements
+      : DEFAULT_ACHIEVEMENTS;
+  const completedAchievements = displayAchievements.filter((a) => a.unlocked).length;
 
   useEffect(() => {
-    void dispatch(fetchProfile());
+    void dispatch(fetchProfile({ force: true }));
   }, [dispatch]);
 
   const data = profile.data;
@@ -40,9 +46,13 @@ export const Profile: React.FC = () => {
   const equippedCardId = data?.equippedCard?.id ?? cards.equippedCardId;
   const equippedCard =
     CHARACTER_CARDS.find((c) => c.id === equippedCardId) || CHARACTER_CARDS[0];
+  const profileAvatar = playerAvatarUrl(
+    data?.user.id ?? auth.user?.userId,
+    data?.user.userName ?? user.username
+  );
   const beltName = progression?.belt || user.belt;
   const activeBelt = BELT_LEVELS.find((b) => b.belt === beltName) || BELT_LEVELS[0];
-  const [isStreakCalendarOpen, setIsStreakCalendarOpen] = useState(false);
+  const [isStreakCalendarOpen, setIsStreakCalendarOpen] = useState(true);
   const equippedCharges =
     data?.equippedCard?.chargesRemaining ??
     (equippedCardId ? cards.inventory[equippedCardId]?.chargesRemaining : null);
@@ -66,19 +76,35 @@ export const Profile: React.FC = () => {
     return set;
   }, [streak?.recentTrainingDays, streak?.lastCompletedDate]);
 
-  const recentStreakDays = Array.from({ length: 14 }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (13 - index));
-    const key = date.toISOString().slice(0, 10);
+  /** Full calendar month — every day of the current month. */
+  const monthCalendar = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstWeekday = new Date(year, month, 1).getDay(); // 0=Sun
+    const blanks = Array.from({ length: firstWeekday }, (_, i) => ({
+      key: `blank-${i}`,
+      blank: true as const,
+    }));
+    const days = Array.from({ length: daysInMonth }, (_, i) => {
+      const dayNumber = i + 1;
+      const date = new Date(year, month, dayNumber);
+      const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
+      return {
+        key,
+        blank: false as const,
+        label: date.toLocaleDateString('en', { weekday: 'short' }),
+        dayNumber,
+        isToday: dayNumber === now.getDate(),
+        isActive: trainingDaySet.has(key),
+      };
+    });
     return {
-      key,
-      label: date.toLocaleDateString('en', { weekday: 'short' }),
-      dayNumber: date.getDate(),
-      isToday: index === 13,
-      // Only mark days the backend reports — never fabricate from streak count
-      isActive: trainingDaySet.has(key),
+      title: now.toLocaleDateString('en', { month: 'long', year: 'numeric' }),
+      cells: [...blanks, ...days],
     };
-  });
+  }, [trainingDaySet]);
 
   const renderAchievementIcon = (iconName: string) => {
     const iconProps = { className: 'h-6 w-6 text-gold' };
@@ -131,19 +157,20 @@ export const Profile: React.FC = () => {
       <Card variant="wood" className="flex items-start gap-8 p-6">
         <div className="relative shrink-0">
           <img
-            src={equippedCard.image}
-            alt={equippedCard.name}
-            className="w-[170px] h-[220px] rounded-lg object-cover border-[3px] border-gold"
+            src={profileAvatar}
+            alt={displayUsername}
+            className="h-[170px] w-[170px] rounded-full object-cover border-[3px] border-gold shadow-lg"
           />
 
           <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-gold text-jade-dark text-[10px] font-black uppercase px-4 py-1 rounded-full">
-            PARTNER
+            Disciple
           </span>
 
-          {equippedCharges != null && (
-            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gradient-to-b from-gold to-gold/80 px-3 py-1 text-[9px] font-black uppercase text-jade-dark shadow-lg">
-              {equippedCharges} charges
-            </div>
+          {equippedCard && (
+            <p className="mt-5 text-center text-[10px] font-bold uppercase tracking-wider text-gold/80">
+              Partner: {equippedCard.name}
+              {equippedCharges != null ? ` · ${equippedCharges} charges` : ''}
+            </p>
           )}
         </div>
 
@@ -219,12 +246,12 @@ export const Profile: React.FC = () => {
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.3em] text-jade-dark/60 dark:text-parchment/60">
-                  Recent Training Days
+                  {monthCalendar.title}
                 </p>
                 <p className="text-sm font-semibold text-jade-dark/80 dark:text-parchment/80">
                   {trainingDaySet.size > 0
-                    ? 'Days recorded by the dojo server.'
-                    : 'Training-day history is not stored yet — only your streak counts are shown.'}
+                    ? 'Gold days mark recorded training from the dojo server.'
+                    : 'Complete a quest to light up training days on this calendar.'}
                 </p>
               </div>
               <div className="rounded-full bg-gold/15 px-3 py-1 text-xs font-black uppercase tracking-[0.2em] text-gold">
@@ -232,23 +259,32 @@ export const Profile: React.FC = () => {
               </div>
             </div>
 
+            <div className="mb-2 grid grid-cols-7 gap-2 text-center text-[10px] font-bold uppercase tracking-wider text-jade-dark/50 dark:text-parchment/50">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                <span key={d}>{d}</span>
+              ))}
+            </div>
+
             <div className="grid grid-cols-7 gap-2">
-              {recentStreakDays.map((day) => (
-                <div key={day.key} className="flex flex-col items-center gap-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-jade-dark/50 dark:text-parchment/50">
-                    {day.label}
-                  </span>
+              {monthCalendar.cells.map((day) =>
+                day.blank ? (
+                  <div key={day.key} className="h-9" />
+                ) : (
                   <div
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg border text-sm font-black ${
+                    key={day.key}
+                    title={day.key}
+                    className={`flex h-9 w-full items-center justify-center rounded-lg border text-sm font-black ${
                       day.isActive
                         ? 'border-gold bg-gold text-jade-dark shadow-[0_0_12px_rgba(247,211,107,0.35)]'
-                        : 'border-gold/15 bg-white/55 text-jade-dark/50 dark:bg-black/20 dark:text-parchment/40'
+                        : day.isToday
+                          ? 'border-gold/60 bg-gold/15 text-jade-dark dark:text-parchment'
+                          : 'border-gold/15 bg-white/55 text-jade-dark/50 dark:bg-black/20 dark:text-parchment/40'
                     }`}
                   >
                     {day.dayNumber}
                   </div>
-                </div>
-              ))}
+                )
+              )}
             </div>
           </div>
         )}
@@ -282,18 +318,18 @@ export const Profile: React.FC = () => {
           <span className="text-xs text-jade-dark/60 dark:text-parchment/60 font-semibold uppercase">
             Completed:{' '}
             <span className="text-gold font-bold font-mono">
-              {completedAchievements} / {achievementsState.achievements.length}
+              {completedAchievements} / {displayAchievements.length}
             </span>
           </span>
         </div>
 
         <div className="space-y-4">
-          {achievementsState.achievements.length === 0 && (
+          {displayAchievements.length === 0 && (
             <p className="text-sm text-jade-dark/60 dark:text-parchment/60 text-center py-4">
               No achievement definitions returned from the server yet.
             </p>
           )}
-          {achievementsState.achievements.map((ach) => {
+          {displayAchievements.map((ach) => {
             return (
               <div
                 key={ach.id}

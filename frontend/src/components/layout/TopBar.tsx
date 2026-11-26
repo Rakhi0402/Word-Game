@@ -2,15 +2,16 @@ import React from 'react';
 import { useAppSelector, useAppDispatch } from '../../store';
 import { toggleDarkMode, toggleSound } from '../../store/settingsSlice';
 import { Coins, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
-import { BELT_LEVELS, CHARACTER_CARDS } from '../../constants';
+import { BELT_LEVELS } from '../../constants';
+import { playerAvatarUrl } from '../../utils/playerAvatar';
 
 export const TopBar: React.FC = () => {
   const user = useAppSelector((state) => state.user);
+  const auth = useAppSelector((state) => state.auth);
   const settings = useAppSelector((state) => state.settings);
-  const cards = useAppSelector((state) => state.cards);
   const dispatch = useAppDispatch();
 
-  const equippedCard = CHARACTER_CARDS.find(c => c.id === cards.equippedCardId) || CHARACTER_CARDS[0];
+  const avatarUrl = playerAvatarUrl(auth.user?.userId, user.username || auth.username);
   const beltLevel = BELT_LEVELS.find(b => b.belt === user.belt) || BELT_LEVELS[0];
 
   return (
@@ -73,11 +74,11 @@ export const TopBar: React.FC = () => {
             {settings.darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </button>
 
-          {/* User Avatar */}
+          {/* User Avatar — fixed per disciple, not equipped scroll */}
           <div className="flex items-center space-x-2 border-l border-gold/20 pl-3">
             <img
-              src={equippedCard.image}
-              alt={equippedCard.name}
+              src={avatarUrl}
+              alt={user.username}
               className="h-9 w-9 rounded-full object-cover border-2 border-gold shadow bg-jade-dark"
             />
             <div className="hidden text-left sm:block">

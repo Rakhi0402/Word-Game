@@ -54,6 +54,14 @@ public class UserPuzzleSession {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    /** XP granted when this session was first completed (for idempotent sync UI). */
+    @Column(name = "xp_awarded")
+    private Integer xpAwarded;
+
+    /** Coins granted when this session was first completed. */
+    @Column(name = "coins_awarded")
+    private Integer coinsAwarded;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

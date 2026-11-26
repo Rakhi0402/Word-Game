@@ -2,6 +2,7 @@ package com.kungfu.wordquest.reward.repository;
 
 import com.kungfu.wordquest.reward.entity.UserAchievement;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -22,4 +23,8 @@ public interface UserAchievementRepository extends JpaRepository<UserAchievement
     List<UserAchievement> findByUserIdWithAchievement(@Param("userId") UUID userId);
 
     Optional<UserAchievement> findByUserIdAndAchievementId(UUID userId, String achievementId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM UserAchievement ua WHERE ua.user.id = :userId")
+    void deleteAllByUserId(@Param("userId") UUID userId);
 }

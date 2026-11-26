@@ -9,6 +9,7 @@ import com.kungfu.wordquest.economy.GameEconomy;
 import com.kungfu.wordquest.economy.ProgressionService;
 import com.kungfu.wordquest.profile.dto.ProfileResponse;
 import com.kungfu.wordquest.profile.dto.ProfileResponse.*;
+import com.kungfu.wordquest.puzzle.repository.UserPuzzleSessionRepository;
 import com.kungfu.wordquest.reward.entity.Achievement;
 import com.kungfu.wordquest.reward.entity.UserAchievement;
 import com.kungfu.wordquest.reward.repository.AchievementRepository;
@@ -20,12 +21,17 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +42,7 @@ public class ProfileService {
     private final UserCardRepository userCardRepository;
     private final AchievementRepository achievementRepository;
     private final UserAchievementRepository userAchievementRepository;
+    private final UserPuzzleSessionRepository userPuzzleSessionRepository;
     private final ProgressionService progressionService;
 
     @Transactional(readOnly = true)
@@ -72,7 +79,7 @@ public class ProfileService {
                         .shields(user.getStreakShields())
                         .longest(Math.max(stats.getHighestStreak(), Math.max(user.getCurrentStreak(), user.getDailyStreak())))
                         .lastCompletedDate(user.getLastPuzzleDate())
-                        .recentTrainingDays(List.of())
+                        .recentTrainingDays(recentTrainingDays(userId))
                         .build())
                 .statistics(StatisticsSection.builder()
                         .wordsFound(stats.getWordsFound())
@@ -89,6 +96,18 @@ public class ProfileService {
                 .equippedCard(buildEquippedCard(user))
                 .achievements(achievements)
                 .build();
+    }
+
+    private List<String> recentTrainingDays(UUID userId) {
+        LocalDateTime since = LocalDate.now().minusDays(60).atStartOfDay();
+        Set<String> days = new LinkedHashSet<>();
+        for (LocalDateTime completedAt : userPuzzleSessionRepository.findCompletedAtSince(userId, since)) {
+            days.add(completedAt.toLocalDate().toString());
+            if (days.size() >= 60) {
+                break;
+            }
+        }
+        return days.stream().sorted(Comparator.reverseOrder()).collect(Collectors.toList());
     }
 
     private EquippedCardSection buildEquippedCard(User user) {

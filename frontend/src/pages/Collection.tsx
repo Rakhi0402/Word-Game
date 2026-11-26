@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store';
 import {
   setRarityFilter,
@@ -43,7 +43,7 @@ const mapCard = (c: {
     id: c.id,
     name: c.name || local?.name || c.id,
     rarity: (c.rarity as RarityType) || local?.rarity || 'common',
-    image: local?.image || c.image || '',
+    image: c.image || local?.image || '',
     stars: c.stars ?? local?.stars ?? 1,
     bonuses: c.bonuses || local?.bonuses || [],
     description: c.description || local?.description || '',
@@ -63,25 +63,41 @@ export const Collection: React.FC = () => {
   const [copiedLink, setCopiedLink] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [catalog, setCatalog] = useState<CharacterCard[]>([]);
 
-  const loadCollection = useCallback(async () => {
+  const loadCollection = useCallback(async (force = false) => {
     setLoading(true);
     setLoadError(null);
     try {
-      const collection = await cardService.getCollection();
+      const [serverCatalog, collection] = await Promise.all([
+        cardService.getAllCards({ force }),
+        cardService.getCollection({ force }),
+      ]);
+      // Prefer local pack art so CanvasCard always has a preloaded image.
+      const mappedCatalog =
+        serverCatalog?.length > 0
+          ? serverCatalog.map(mapCard)
+          : CHARACTER_CARDS;
+      const withLocalArt = mappedCatalog.map((c) => {
+        const local = CHARACTER_CARDS.find((x) => x.id === c.id);
+        return local ? { ...c, image: local.image || c.image } : c;
+      });
+      setCatalog(withLocalArt.length > 0 ? withLocalArt : CHARACTER_CARDS);
       dispatch(replaceCards(mapCollectionToCards(collection)));
       if (collection.equippedCardId) {
         dispatch(setCharacterMultiplier(getCharacterMultiplier(collection.equippedCardId)));
       }
     } catch (err) {
       setLoadError(err instanceof ApiClientError ? err.message : 'Could not load collection.');
+      setCatalog(CHARACTER_CARDS);
     } finally {
       setLoading(false);
     }
   }, [dispatch]);
 
   useEffect(() => {
-    void loadCollection();
+    // Force network so stale empty IndexedDB ownership does not hide starter scrolls.
+    void loadCollection(true);
   }, [loadCollection]);
 
   const filterOptions = [
@@ -92,10 +108,14 @@ export const Collection: React.FC = () => {
     { id: 'legendary', label: 'Legendary' },
   ];
 
-  const filteredCards = CHARACTER_CARDS.filter((card) => {
-    if (cards.rarityFilter === 'all') return true;
-    return card.rarity === cards.rarityFilter;
-  });
+  const filteredCards = useMemo(
+    () =>
+      (catalog.length > 0 ? catalog : CHARACTER_CARDS).filter((card) => {
+        if (cards.rarityFilter === 'all') return true;
+        return card.rarity === cards.rarityFilter;
+      }),
+    [catalog, cards.rarityFilter]
+  );
 
   const handleDrawCard = async () => {
     const useToken = user.freeChestTokens > 0;
@@ -118,7 +138,10 @@ export const Collection: React.FC = () => {
         refundAmount: result.refundAmount,
         usedFreeToken: Boolean(result.usedFreeToken ?? useToken),
       });
-      await Promise.all([loadCollection(), dispatch(fetchDashboard())]);
+      await Promise.all([
+        loadCollection(true),
+        dispatch(fetchDashboard({ force: true })),
+      ]);
     } catch (err) {
       playSound.failure(soundEnabled);
       alert(err instanceof ApiClientError ? err.message : 'Draw failed.');
@@ -149,7 +172,7 @@ export const Collection: React.FC = () => {
       const collection = await cardService.equipCard(cardId);
       dispatch(replaceCards(mapCollectionToCards(collection)));
       dispatch(setCharacterMultiplier(getCharacterMultiplier(cardId)));
-      await dispatch(fetchDashboard());
+      await dispatch(fetchDashboard({ force: true }));
     } catch (err) {
       playSound.failure(soundEnabled);
       alert(err instanceof ApiClientError ? err.message : 'Could not equip card.');

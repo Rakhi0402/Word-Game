@@ -1,6 +1,7 @@
 package com.kungfu.wordquest.puzzle.scheduler;
 
 import com.kungfu.wordquest.dictionary.PuzzleWordSnapshotService;
+import com.kungfu.wordquest.puzzle.engine.DifficultyGate;
 import com.kungfu.wordquest.puzzle.engine.PuzzleGenerationService;
 import com.kungfu.wordquest.puzzle.entity.DailyPuzzle;
 import com.kungfu.wordquest.puzzle.entity.Puzzle;
@@ -15,8 +16,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Component
 @RequiredArgsConstructor
@@ -27,6 +30,7 @@ public class PuzzleSchedulerJobs {
     private final PuzzleRepository puzzleRepository;
     private final DailyPuzzleRepository dailyPuzzleRepository;
     private final PuzzleWordSnapshotService puzzleWordSnapshotService;
+    private final DifficultyGate difficultyGate;
     private final GameClock gameClock;
 
     /** Weekly candidate pool refill — counts from configuration. */
@@ -61,17 +65,27 @@ public class PuzzleSchedulerJobs {
         // Legacy fallback: puzzle still keyed by puzzleDate
         var legacy = puzzleRepository.findByPuzzleDate(date);
         if (legacy.isPresent()) {
-            DailyPuzzle mapped = dailyPuzzleRepository.save(DailyPuzzle.builder()
-                    .puzzle(legacy.get())
-                    .scheduledDate(date)
-                    .build());
-            log.info("Mapped legacy puzzle {} to daily {}", legacy.get().getId(), date);
-            return mapped;
+            Puzzle legacyPuzzle = legacy.get();
+            if (dailyPuzzleRepository.existsByPuzzle_Id(legacyPuzzle.getId())) {
+                log.warn("Legacy puzzle {} already used as daily — generating a fresh pick for {}",
+                        legacyPuzzle.getId(), date);
+            } else if (isValidForDifficulty(legacyPuzzle)) {
+                DailyPuzzle mapped = dailyPuzzleRepository.save(DailyPuzzle.builder()
+                        .puzzle(legacyPuzzle)
+                        .scheduledDate(date)
+                        .build());
+                log.info("Mapped legacy puzzle {} to daily {}", legacyPuzzle.getId(), date);
+                return mapped;
+            }
         }
 
         Puzzle pick = pickFromPool();
         if (pick == null) {
-            // Last resort: generate one medium candidate and persist
+            // Last resort: generate one candidate (needs dictionary). Soft-fail if not ready.
+            if (!generationService.isDictionaryReady()) {
+                throw new IllegalStateException(
+                        "No seeded puzzles and dictionary not ready yet for " + date);
+            }
             String batch = "daily-fallback-" + date;
             pick = generationService.tryGenerate(PuzzleDifficulty.MEDIUM, batch);
             if (pick == null) {
@@ -82,9 +96,18 @@ public class PuzzleSchedulerJobs {
             }
             if (puzzleRepository.existsByFingerprint(pick.getFingerprint())) {
                 pick = puzzleRepository.findByFingerprint(pick.getFingerprint()).orElse(pick);
+                if (dailyPuzzleRepository.existsByPuzzle_Id(pick.getId())) {
+                    throw new IllegalStateException(
+                            "Only duplicate fingerprints available; generate more unused puzzles for " + date);
+                }
             } else {
-                pick = puzzleRepository.save(pick);
+                pick = puzzleRepository.saveAndFlush(pick);
                 puzzleWordSnapshotService.replaceSnapshot(pick, pick.getValidWords(), pick.getPangrams());
+            }
+            if (!isValidForDifficulty(pick)) {
+                throw new IllegalStateException(
+                        "Fallback puzzle failed difficulty gate for " + date + ": "
+                                + difficultyGate.describe(pick.getDifficulty()));
             }
         }
 
@@ -99,19 +122,32 @@ public class PuzzleSchedulerJobs {
         return daily;
     }
 
+    /**
+     * Pick any active puzzle that has never been used as a daily and that passes its difficulty gate.
+     * Word lists may overlap across puzzles; reuse of a past daily is never allowed.
+     */
     private Puzzle pickFromPool() {
-        for (PuzzleDifficulty d : List.of(
-                PuzzleDifficulty.MEDIUM, PuzzleDifficulty.EASY, PuzzleDifficulty.HARD, PuzzleDifficulty.EXPERT)) {
-            List<Puzzle> pool = puzzleRepository.findUnscheduledPoolByDifficulty(d);
-            if (!pool.isEmpty()) {
-                return pool.get(0);
+        List<Puzzle> unused = puzzleRepository.findActiveNeverUsedAsDaily();
+        List<Puzzle> valid = new ArrayList<>();
+        for (Puzzle p : unused) {
+            if (isValidForDifficulty(p)) {
+                valid.add(p);
+            } else {
+                log.debug("Skipping puzzle {} — {}", p.getId(), difficultyGate.describe(p.getDifficulty()));
             }
         }
-        // Any active puzzle not yet scheduled
-        return puzzleRepository.findRecentlyGeneratedPuzzles().stream()
-                .filter(p -> dailyPuzzleRepository.findAll().stream()
-                        .noneMatch(d -> d.getPuzzle().getId().equals(p.getId())))
-                .findFirst()
-                .orElse(null);
+        if (valid.isEmpty()) {
+            return null;
+        }
+        return valid.get(ThreadLocalRandom.current().nextInt(valid.size()));
+    }
+
+    private boolean isValidForDifficulty(Puzzle p) {
+        if (p == null || !p.isActive()) {
+            return false;
+        }
+        int words = p.getValidWords() != null ? p.getValidWords().size() : 0;
+        int pangrams = p.getPangrams() != null ? p.getPangrams().size() : 0;
+        return difficultyGate.passes(p.getDifficulty(), words, pangrams);
     }
 }

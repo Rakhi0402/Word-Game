@@ -43,7 +43,7 @@ export interface DashboardActiveCard {
 
 export interface DashboardDailyQuest {
   available: boolean;
-  puzzleId: string | null;
+  puzzleId: number | string | null;
   difficulty: PuzzleDifficulty | string | null;
   completed: boolean;
   choicePuzzlesRemaining: number;
@@ -151,17 +151,16 @@ export interface BackendUserAchievement {
 }
 
 export interface BackendPuzzle {
-  id: string;
+  id: number;
   puzzleDate?: string;
   scheduledDate?: string | null;
   letters: string[];
   centerLetter: string;
-  /** Intentionally omitted by production API — do not rely on this. */
+  /** Playable answers for Spelling Bee–style local validation. */
   validWords?: string[];
   pangrams?: string[];
   difficulty: string;
   targetWordCount?: number;
-  /** Safe count of pangrams (words themselves are never sent). */
   pangramCount?: number;
   minimumWordLength?: number;
   xpReward: number;

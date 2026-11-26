@@ -5,6 +5,8 @@ import com.kungfu.wordquest.card.entity.UserCard;
 import com.kungfu.wordquest.card.repository.CardRepository;
 import com.kungfu.wordquest.card.repository.UserCardRepository;
 import com.kungfu.wordquest.leaderboard.service.LeaderboardService;
+import com.kungfu.wordquest.puzzle.repository.UserPuzzleSessionRepository;
+import com.kungfu.wordquest.reward.repository.UserAchievementRepository;
 import com.kungfu.wordquest.user.entity.User;
 import com.kungfu.wordquest.user.entity.UserStats;
 import com.kungfu.wordquest.user.repository.UserRepository;
@@ -32,6 +34,8 @@ class UserServiceResetTest {
     @Mock UserRepository userRepository;
     @Mock CardRepository cardRepository;
     @Mock UserCardRepository userCardRepository;
+    @Mock UserAchievementRepository userAchievementRepository;
+    @Mock UserPuzzleSessionRepository userPuzzleSessionRepository;
     @Mock LeaderboardService leaderboardService;
     @InjectMocks UserService userService;
 
@@ -60,6 +64,9 @@ class UserServiceResetTest {
         assertEquals("White", reset.getBelt());
         assertEquals(0, reset.getXp());
         assertEquals("po_common", reset.getEquippedCardId());
+
+        verify(userAchievementRepository).deleteAllByUserId(userId);
+        verify(userPuzzleSessionRepository).deleteAllByUserId(userId);
 
         InOrder order = inOrder(userCardRepository);
         order.verify(userCardRepository).deleteAllByUserId(userId);

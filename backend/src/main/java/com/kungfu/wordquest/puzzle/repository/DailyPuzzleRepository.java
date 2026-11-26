@@ -15,6 +15,8 @@ public interface DailyPuzzleRepository extends JpaRepository<DailyPuzzle, UUID> 
 
     boolean existsByScheduledDate(LocalDate scheduledDate);
 
+    boolean existsByPuzzle_Id(Long puzzleId);
+
     Optional<DailyPuzzle> findByScheduledDate(LocalDate scheduledDate);
 
     @Query("""

@@ -6,22 +6,26 @@ import lombok.Value;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.UUID;
 
 /**
- * Safe puzzle payload for clients — never includes validWords / answer keys.
+ * Playable puzzle payload for Spelling Bee–style local validation.
+ * Includes the answer list so the client can validate instantly; server sync remains authoritative for XP/coins.
  */
 @Value
 @Builder
 public class PuzzlePlayDto {
-    UUID id;
+    Long id;
     PuzzleDifficulty difficulty;
     List<String> letters;
     String centerLetter;
     int minimumWordLength;
     int targetWordCount;
-    /** Number of pangrams in the puzzle (count only — not the words). */
+    /** Number of pangrams in the puzzle. */
     int pangramCount;
+    /** Full playable word list for this puzzle (local validation). */
+    List<String> validWords;
+    /** Pangram words for this puzzle. */
+    List<String> pangrams;
     int xpReward;
     int coinReward;
     LocalDate scheduledDate;

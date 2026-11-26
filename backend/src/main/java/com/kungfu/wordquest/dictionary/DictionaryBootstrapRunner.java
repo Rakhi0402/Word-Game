@@ -10,9 +10,10 @@ import org.springframework.stereotype.Component;
 /**
  * Explicit dictionary import via {@code --import-dictionary}.
  * Optional one-time seed when DB is empty ({@code wordquest.dictionary.seed-if-empty=true}).
+ * Runs after sample puzzle seeding so gameplay works while this (slow) import finishes.
  */
 @Component
-@Order(50)
+@Order(100)
 @RequiredArgsConstructor
 @Slf4j
 public class DictionaryBootstrapRunner implements ApplicationRunner {

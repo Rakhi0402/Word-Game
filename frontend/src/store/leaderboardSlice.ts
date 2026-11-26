@@ -40,13 +40,15 @@ export const fetchLeaderboard = createAsyncThunk<
     totalPages: number;
     hasNext: boolean;
   },
-  { page?: number; size?: number } | undefined,
+  { page?: number; size?: number; force?: boolean } | undefined,
   { dispatch: AppDispatch; state: RootState; rejectValue: string }
 >('leaderboard/fetch', async (args, { rejectWithValue }) => {
   try {
     const page = args?.page ?? 0;
     const size = args?.size ?? 20;
-    const data = await leaderboardService.getLeaderboard(page, size);
+    const data = await leaderboardService.getLeaderboard(page, size, {
+      force: args?.force,
+    });
     const mapped = mapLeaderboardPage(data);
     return {
       ...mapped,

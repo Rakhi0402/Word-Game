@@ -6,12 +6,17 @@ import com.kungfu.wordquest.card.repository.CardRepository;
 import com.kungfu.wordquest.common.exception.ErrorCode;
 import com.kungfu.wordquest.common.exception.ResourceNotFoundException;
 import com.kungfu.wordquest.common.exception.ValidationException;
+import com.kungfu.wordquest.dictionary.DictionaryImportProgress;
 import com.kungfu.wordquest.dictionary.DictionaryImportResult;
 import com.kungfu.wordquest.dictionary.DictionaryImportService;
 import com.kungfu.wordquest.dictionary.DictionaryProperties;
 import com.kungfu.wordquest.dictionary.DictionaryService;
+import com.kungfu.wordquest.ai.AiPuzzleGenerationService;
+import com.kungfu.wordquest.ai.GroqProperties;
 import com.kungfu.wordquest.puzzle.cache.DailyPuzzleCacheService;
+import com.kungfu.wordquest.puzzle.engine.DifficultyGate;
 import com.kungfu.wordquest.puzzle.engine.PuzzleGenerationService;
+import com.kungfu.wordquest.puzzle.config.PuzzleProperties;
 import com.kungfu.wordquest.puzzle.entity.DailyPuzzle;
 import com.kungfu.wordquest.puzzle.entity.Puzzle;
 import com.kungfu.wordquest.puzzle.enums.PuzzleDifficulty;
@@ -45,6 +50,10 @@ public class AdminService {
     private final CardRepository cardRepository;
     private final AchievementRepository achievementRepository;
     private final PuzzleGenerationService puzzleGenerationService;
+    private final AiPuzzleGenerationService aiPuzzleGenerationService;
+    private final DifficultyGate difficultyGate;
+    private final PuzzleProperties puzzleProperties;
+    private final GroqProperties groqProperties;
     private final DailyPuzzleCacheService dailyPuzzleCache;
     private final DictionaryService dictionaryService;
     private final DictionaryImportService dictionaryImportService;
@@ -129,7 +138,7 @@ public class AdminService {
     }
 
     @Transactional(readOnly = true)
-    public AdminPuzzleDetail getPuzzle(UUID id) {
+    public AdminPuzzleDetail getPuzzle(Long id) {
         Puzzle puzzle = puzzleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.PUZZLE_NOT_FOUND, "Puzzle not found"));
         return toPuzzleDetail(puzzle);
@@ -138,10 +147,14 @@ public class AdminService {
     @Transactional
     public AdminPuzzleDetail generatePuzzle(String difficulty) {
         PuzzleDifficulty d = parseDifficulty(difficulty);
+        puzzleGenerationService.requireDictionaryReady();
         String batch = "admin-" + gameClock.today() + "-" + UUID.randomUUID().toString().substring(0, 8);
         int created = puzzleGenerationService.generateForDifficulty(d, 1, batch);
         if (created < 1) {
-            throw new ValidationException("Could not generate a puzzle for " + d + ". Check dictionary size.");
+            throw new ValidationException(
+                    "Could not generate a puzzle for " + d + ". "
+                            + difficultyGate.describe(d)
+                            + ". Import a larger English dictionary if needed.");
         }
         Puzzle latest = puzzleRepository.findUnscheduledPoolByDifficulty(d).stream()
                 .filter(p -> batch.equals(p.getGenerationBatchId()))
@@ -153,8 +166,31 @@ public class AdminService {
         return toPuzzleDetail(latest);
     }
 
+    @Transactional(readOnly = true)
+    public AdminAiStatusResponse aiStatus() {
+        long count = dictionaryService.allowedCount();
+        long min = puzzleProperties.getGeneration().getMinDictionaryWords();
+        return AdminAiStatusResponse.builder()
+                .groqConfigured(groqProperties.isConfigured())
+                .dictionaryReady(count >= min)
+                .dictionaryAllowedCount(count)
+                .minDictionaryWords(min)
+                .model(groqProperties.getModel())
+                .easyGate(difficultyGate.describe(PuzzleDifficulty.EASY))
+                .mediumGate(difficultyGate.describe(PuzzleDifficulty.MEDIUM))
+                .hardGate(difficultyGate.describe(PuzzleDifficulty.HARD))
+                .expertGate(difficultyGate.describe(PuzzleDifficulty.EXPERT))
+                .build();
+    }
+
     @Transactional
-    public AdminPuzzleDetail setPuzzleActive(UUID id, boolean active) {
+    public AdminAiGenerateResponse generatePuzzlesWithAi(String difficulty, int count) {
+        PuzzleDifficulty d = parseDifficulty(difficulty);
+        return aiPuzzleGenerationService.generateWithAi(d, count, this::toPuzzleDetail);
+    }
+
+    @Transactional
+    public AdminPuzzleDetail setPuzzleActive(Long id, boolean active) {
         Puzzle puzzle = puzzleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.PUZZLE_NOT_FOUND, "Puzzle not found"));
         puzzle.setActive(active);
@@ -172,15 +208,28 @@ public class AdminService {
     }
 
     @Transactional
-    public AdminDailyResponse assignDaily(LocalDate date, UUID puzzleId) {
+    public AdminDailyResponse assignDaily(LocalDate date, Long puzzleId) {
         LocalDate d = date != null ? date : gameClock.today();
         Puzzle puzzle = puzzleRepository.findById(puzzleId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.PUZZLE_NOT_FOUND, "Puzzle not found"));
         if (!puzzle.isActive()) {
             throw new ValidationException("Cannot assign an inactive puzzle as daily.");
         }
+        int words = puzzle.getValidWords() != null ? puzzle.getValidWords().size() : 0;
+        int pangrams = puzzle.getPangrams() != null ? puzzle.getPangrams().size() : 0;
+        if (!difficultyGate.passes(puzzle.getDifficulty(), words, pangrams)) {
+            throw new ValidationException(
+                    "Puzzle " + puzzleId + " is not valid for " + difficultyGate.describe(puzzle.getDifficulty()));
+        }
 
         DailyPuzzle daily = dailyPuzzleRepository.findByScheduledDate(d).orElse(null);
+        boolean alreadyUsedElsewhere = dailyPuzzleRepository.existsByPuzzle_Id(puzzleId)
+                && (daily == null || daily.getPuzzle() == null || !puzzleId.equals(daily.getPuzzle().getId()));
+        if (alreadyUsedElsewhere) {
+            throw new ValidationException(
+                    "Puzzle " + puzzleId + " was already used as a daily and cannot be reused.");
+        }
+
         if (daily == null) {
             daily = DailyPuzzle.builder().scheduledDate(d).puzzle(puzzle).build();
         } else {
@@ -260,9 +309,35 @@ public class AdminService {
                 .build();
     }
 
-    @Transactional
     public DictionaryImportResult importDictionary() {
         return dictionaryImportService.importFromConfiguredSource();
+    }
+
+    public DictionaryImportProgress startDictionaryImport() {
+        boolean started = dictionaryImportService.startAsyncImport();
+        DictionaryImportProgress progress = dictionaryImportService.getProgress();
+        if (!started && dictionaryImportService.isRunning()) {
+            return DictionaryImportProgress.builder()
+                    .status(progress.getStatus())
+                    .message("Import already running")
+                    .processed(progress.getProcessed())
+                    .accepted(progress.getAccepted())
+                    .rejected(progress.getRejected())
+                    .duplicates(progress.getDuplicates())
+                    .updated(progress.getUpdated())
+                    .allowedCount(progress.getAllowedCount())
+                    .source(progress.getSource())
+                    .sourceVersion(progress.getSourceVersion())
+                    .build();
+        }
+        if (!started) {
+            throw new ValidationException("Could not start dictionary import");
+        }
+        return progress;
+    }
+
+    public DictionaryImportProgress dictionaryImportStatus() {
+        return dictionaryImportService.getProgress();
     }
 
     // ---------- mappers ----------

@@ -90,7 +90,7 @@ public class CardBonusEvaluator {
                 multiplier += 0.35;
                 break;
 
-            case "Oogway_legendary":
+            case "oogway_legendary":
                 multiplier += 1.0;
                 break;
 
@@ -129,7 +129,7 @@ public class CardBonusEvaluator {
                 multiplier += 0.25;
                 break;
 
-            case "Oogway_legendary":
+            case "oogway_legendary":
                 multiplier += 1.0;
                 break;
 

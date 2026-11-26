@@ -1,6 +1,9 @@
 # Offline dictionary setup (ESDB / SCOWL)
 
-Word Quest gameplay **never** calls SCOWL, wordfreq, or any external API.
+Word Quest gameplay **never** calls SCOWL, wordfreq, Groq, or any external API at play time.
+
+Admin **Generate with AI (Groq)** may propose letter hives only; every valid word is still
+expanded and gated against this imported lexicon (minimum length 4).
 
 ## Import
 

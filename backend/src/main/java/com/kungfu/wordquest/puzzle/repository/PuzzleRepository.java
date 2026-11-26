@@ -13,7 +13,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
-public interface PuzzleRepository extends JpaRepository<Puzzle, UUID> {
+public interface PuzzleRepository extends JpaRepository<Puzzle, Long> {
 
     Optional<Puzzle> findByPuzzleDate(LocalDate puzzleDate);
 
@@ -32,6 +32,20 @@ public interface PuzzleRepository extends JpaRepository<Puzzle, UUID> {
 
     org.springframework.data.domain.Page<Puzzle> findByActive(
             boolean active, org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * Active pool candidates that have never been scheduled as a daily puzzle.
+     * Shared valid-words across puzzles are allowed; uniqueness is fingerprint-based.
+     */
+    @Query("""
+            SELECT p FROM Puzzle p
+            WHERE p.active = true
+              AND p.id NOT IN (
+                  SELECT d.puzzle.id FROM DailyPuzzle d
+              )
+            ORDER BY p.createdAt ASC
+            """)
+    List<Puzzle> findActiveNeverUsedAsDaily();
 
     @Query("""
             SELECT p FROM Puzzle p

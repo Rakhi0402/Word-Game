@@ -17,6 +17,7 @@ public class PuzzleProperties {
     private Dictionary dictionary = new Dictionary();
     private Weekly weekly = new Weekly();
     private Schedule schedule = new Schedule();
+    private Generation generation = new Generation();
 
     @Getter
     @Setter
@@ -37,7 +38,31 @@ public class PuzzleProperties {
         private int hard = 7;
         private int expert = 7;
         private int maxAttemptsPerCandidate = 200;
-        private int minValidWords = 15;
+        /** Legacy floor; prefer {@link Generation} mins. */
+        private int minValidWords = 20;
+    }
+
+    /**
+     * Publish gates for Spelling Bee–style answer lists (min length 4, dictionary-proven).
+     */
+    @Getter
+    @Setter
+    public static class Generation {
+        private int easyMinWords = 20;
+        private int mediumMinWords = 35;
+        private int hardMinWords = 50;
+        private int expertMinWords = 70;
+        private int easyMinPangrams = 1;
+        private int mediumMinPangrams = 1;
+        private int hardMinPangrams = 1;
+        private int expertMinPangrams = 2;
+        /** Soft caps for random search (0 = no soft cap). */
+        private int easySoftMaxWords = 45;
+        private int mediumSoftMaxWords = 70;
+        private int hardSoftMaxWords = 100;
+        private int expertSoftMaxWords = 0;
+        /** Minimum allowed dictionary size before generation is permitted. */
+        private long minDictionaryWords = 1000;
     }
 
     @Getter

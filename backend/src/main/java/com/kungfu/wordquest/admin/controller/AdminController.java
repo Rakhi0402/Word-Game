@@ -4,6 +4,7 @@ import com.kungfu.wordquest.admin.dto.*;
 import com.kungfu.wordquest.admin.service.AdminService;
 import com.kungfu.wordquest.card.entity.Card;
 import com.kungfu.wordquest.common.api.ApiResponse;
+import com.kungfu.wordquest.dictionary.DictionaryImportProgress;
 import com.kungfu.wordquest.dictionary.DictionaryImportResult;
 import com.kungfu.wordquest.reward.entity.Achievement;
 import jakarta.validation.Valid;
@@ -65,7 +66,7 @@ public class AdminController {
     }
 
     @GetMapping("/puzzles/{id}")
-    public ResponseEntity<ApiResponse<AdminPuzzleDetail>> getPuzzle(@PathVariable UUID id) {
+    public ResponseEntity<ApiResponse<AdminPuzzleDetail>> getPuzzle(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success("Puzzle", adminService.getPuzzle(id)));
     }
 
@@ -76,9 +77,23 @@ public class AdminController {
                 ApiResponse.success("Puzzle generated", adminService.generatePuzzle(difficulty)));
     }
 
+    @GetMapping("/puzzles/ai-status")
+    public ResponseEntity<ApiResponse<AdminAiStatusResponse>> aiStatus() {
+        return ResponseEntity.ok(ApiResponse.success("AI generation status", adminService.aiStatus()));
+    }
+
+    @PostMapping("/puzzles/generate-ai")
+    public ResponseEntity<ApiResponse<AdminAiGenerateResponse>> generatePuzzlesWithAi(
+            @RequestParam String difficulty,
+            @RequestParam(defaultValue = "5") int count) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "AI puzzle generation finished",
+                adminService.generatePuzzlesWithAi(difficulty, count)));
+    }
+
     @PatchMapping("/puzzles/{id}/active")
     public ResponseEntity<ApiResponse<AdminPuzzleDetail>> setActive(
-            @PathVariable UUID id,
+            @PathVariable Long id,
             @RequestBody Map<String, Boolean> body) {
         boolean active = Boolean.TRUE.equals(body.get("active"));
         return ResponseEntity.ok(
@@ -94,7 +109,7 @@ public class AdminController {
     @PostMapping("/daily/assign")
     public ResponseEntity<ApiResponse<AdminDailyResponse>> assignDaily(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam UUID puzzleId) {
+            @RequestParam Long puzzleId) {
         return ResponseEntity.ok(
                 ApiResponse.success("Daily assigned", adminService.assignDaily(date, puzzleId)));
     }
@@ -147,8 +162,22 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success("Dictionary stats", adminService.dictionaryStats()));
     }
 
+    /** Starts chunked background import — returns immediately. Poll {@code /dictionary/import/status}. */
     @PostMapping("/dictionary/import")
-    public ResponseEntity<ApiResponse<DictionaryImportResult>> importDictionary() {
+    public ResponseEntity<ApiResponse<DictionaryImportProgress>> importDictionary() {
+        return ResponseEntity.ok(
+                ApiResponse.success("Dictionary import started", adminService.startDictionaryImport()));
+    }
+
+    @GetMapping("/dictionary/import/status")
+    public ResponseEntity<ApiResponse<DictionaryImportProgress>> importStatus() {
+        return ResponseEntity.ok(
+                ApiResponse.success("Dictionary import status", adminService.dictionaryImportStatus()));
+    }
+
+    /** Optional blocking import (CLI/debug). Prefer async {@code POST /dictionary/import}. */
+    @PostMapping("/dictionary/import/sync")
+    public ResponseEntity<ApiResponse<DictionaryImportResult>> importDictionarySync() {
         return ResponseEntity.ok(
                 ApiResponse.success("Dictionary import finished", adminService.importDictionary()));
     }

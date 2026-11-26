@@ -9,6 +9,7 @@ import { settingsService } from '../services/settingsService';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { AlertDialogReset } from '../components/ui/AlertDialogReset';
+import { AlertDialogConfirm } from '../components/ui/AlertDialogConfirm';
 import { playSound } from '../utils/audio';
 import { ApiClientError } from '../types/auth';
 import {
@@ -214,14 +215,25 @@ export const Settings: React.FC = () => {
               <h4 className="font-bold text-sm tracking-wide text-parchment">Leave Dojo</h4>
               <p className="text-[10px] text-parchment/50">Log out of the current training session.</p>
             </div>
-            <Button
-              variant="danger"
-              onClick={handleLogout}
-              disabled={loggingOut}
-              className="px-4 py-2 flex items-center space-x-1.5"
-            >
-              <LogOut className="h-4 w-4" /> <span>{loggingOut ? 'Exiting…' : 'Exit Dojo'}</span>
-            </Button>
+            <AlertDialogConfirm
+              tone="danger"
+              title="Exit the Dojo?"
+              description="You will be signed out and returned to the login gate. Your progress stays safely on the server."
+              confirmLabel="Exit Dojo"
+              cancelLabel="Stay"
+              busy={loggingOut}
+              onConfirm={handleLogout}
+              trigger={
+                <Button
+                  variant="danger"
+                  disabled={loggingOut}
+                  className="px-4 py-2 flex items-center space-x-1.5"
+                >
+                  <LogOut className="h-4 w-4" />{' '}
+                  <span>{loggingOut ? 'Exiting…' : 'Exit Dojo'}</span>
+                </Button>
+              }
+            />
           </div>
         </div>
       </Card>

@@ -1,7 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
 import { dashboardService } from '../services/dashboardService';
-import { achievementService, cardService, leaderboardService } from '../services/gameApi';
 import type { DashboardResponse } from '../types/dashboard';
 import { ApiClientError } from '../types/auth';
 import { applyServerSnapshot } from './applyServerState';
@@ -12,6 +11,7 @@ interface DashboardState {
   loading: boolean;
   error: string | null;
   lastFetchedAt: string | null;
+  fromCache: boolean;
 }
 
 const initialState: DashboardState = {
@@ -19,28 +19,22 @@ const initialState: DashboardState = {
   loading: false,
   error: null,
   lastFetchedAt: null,
+  fromCache: false,
 };
 
+/**
+ * Single dashboard request (read-through IndexedDB/session cache).
+ * Inventory / achievements / leaderboard load on their own pages to avoid fan-out.
+ */
 export const fetchDashboard = createAsyncThunk<
   DashboardResponse,
-  void,
+  { force?: boolean } | void,
   { dispatch: AppDispatch; state: RootState; rejectValue: string }
->('dashboard/fetch', async (_, { dispatch, rejectWithValue }) => {
+>('dashboard/fetch', async (arg, { dispatch, rejectWithValue }) => {
   try {
-    const [dashboard, inventory, achievements, leaderboard] = await Promise.all([
-      dashboardService.getDashboard(),
-      cardService.getInventory().catch(() => ({ cards: [], equippedCardId: null })),
-      achievementService.getAchievements().catch(() => []),
-      leaderboardService.getLeaderboard(0, 20).catch(() => null),
-    ]);
-
-    applyServerSnapshot(dispatch, {
-      dashboard,
-      inventory,
-      achievements,
-      leaderboard: leaderboard ?? undefined,
-    });
-
+    const force = Boolean(arg && typeof arg === 'object' && arg.force);
+    const dashboard = await dashboardService.getDashboard({ force });
+    applyServerSnapshot(dispatch, { dashboard });
     return dashboard;
   } catch (err) {
     const message =
@@ -60,6 +54,7 @@ const dashboardSlice = createSlice({
       state.error = null;
       state.lastFetchedAt = null;
       state.loading = false;
+      state.fromCache = false;
     },
     setDashboardData(state, action: PayloadAction<DashboardResponse>) {
       state.data = action.payload;

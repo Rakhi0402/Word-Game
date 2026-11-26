@@ -1,6 +1,6 @@
 package com.kungfu.wordquest.puzzle.engine;
 
-import com.kungfu.wordquest.common.constants.RewardConstants;
+import com.kungfu.wordquest.common.exception.ValidationException;
 import com.kungfu.wordquest.dictionary.DictionaryProperties;
 import com.kungfu.wordquest.dictionary.DictionaryService;
 import com.kungfu.wordquest.dictionary.PuzzleWordSnapshotService;
@@ -21,13 +21,16 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
  * Generates immutable candidate puzzles from the local PostgreSQL dictionary.
  * Persists {@code PuzzleWord} snapshots — gameplay never re-queries the live lexicon.
+ * LLM (Groq) may propose letter sets; this service always expands + gates via the dictionary.
  */
 @Service
 @RequiredArgsConstructor
@@ -41,11 +44,12 @@ public class PuzzleGenerationService {
     private final PuzzleProperties properties;
     private final DictionaryProperties dictionaryProperties;
     private final PuzzleValidator puzzleValidator;
+    private final DifficultyGate difficultyGate;
     private final SecureRandom random = new SecureRandom();
 
     @Transactional
     public int generateWeeklyPool(String batchId) {
-        ensureDictionaryReady();
+        requireDictionaryReady();
         int created = 0;
         created += generateForDifficulty(PuzzleDifficulty.EASY, properties.getWeekly().getEasy(), batchId);
         created += generateForDifficulty(PuzzleDifficulty.MEDIUM, properties.getWeekly().getMedium(), batchId);
@@ -57,7 +61,7 @@ public class PuzzleGenerationService {
 
     @Transactional
     public int generateForDifficulty(PuzzleDifficulty difficulty, int count, String batchId) {
-        ensureDictionaryReady();
+        requireDictionaryReady();
         int created = 0;
         int attempts = 0;
         int maxAttempts = Math.max(count * properties.getWeekly().getMaxAttemptsPerCandidate(), count);
@@ -70,7 +74,7 @@ public class PuzzleGenerationService {
             if (puzzleRepository.existsByFingerprint(candidate.getFingerprint())) {
                 continue;
             }
-            Puzzle saved = puzzleRepository.save(candidate);
+            Puzzle saved = puzzleRepository.saveAndFlush(candidate);
             snapshotService.replaceSnapshot(saved, saved.getValidWords(), saved.getPangrams());
             created++;
         }
@@ -82,14 +86,39 @@ public class PuzzleGenerationService {
 
     /** Generate one candidate without persisting (caller must save + snapshot). */
     public Puzzle tryGenerate(PuzzleDifficulty targetDifficulty, String batchId) {
-        ensureDictionaryReady();
-        int minWords = Math.max(properties.getWeekly().getMinValidWords(), targetWords(targetDifficulty));
+        if (!isDictionaryReady()) {
+            log.warn("Word dictionary is empty — puzzle generation skipped until import finishes");
+            return null;
+        }
         char center = randomLetter();
         List<Character> pool = buildPool(center);
-        List<String> validNormalized = dictionaryService.findWordsForLetters(
-                pool, center, GameEconomy.MIN_WORD_LENGTH);
-        if (validNormalized.size() < minWords) {
-            return null;
+        return materializeFromLetters(pool, center, targetDifficulty, batchId, true).orElse(null);
+    }
+
+    /**
+     * Expand a letter hive against the open-source dictionary and apply difficulty gates.
+     *
+     * @param randomBand when true, also apply soft max (random search); AI uses false.
+     */
+    public Optional<Puzzle> materializeFromLetters(
+            List<Character> letters,
+            char centerLetter,
+            PuzzleDifficulty targetDifficulty,
+            String batchId,
+            boolean randomBand) {
+        List<Character> pool = normalizePool(letters, centerLetter);
+        if (pool.size() != 7) {
+            return Optional.empty();
+        }
+        char center = Character.toUpperCase(centerLetter);
+
+        int minLen = GameEconomy.MIN_WORD_LENGTH;
+        List<String> validNormalized = dictionaryService.findWordsForLetters(pool, center, minLen);
+        int minRequired = Math.max(
+                properties.getWeekly().getMinValidWords(),
+                difficultyGate.minValidWords(targetDifficulty));
+        if (validNormalized.size() < minRequired) {
+            return Optional.empty();
         }
 
         List<String> validDisplay = validNormalized.stream()
@@ -100,12 +129,12 @@ public class PuzzleGenerationService {
         List<String> pangrams = validDisplay.stream()
                 .filter(w -> puzzleValidator.isPangram(w, pool))
                 .collect(Collectors.toList());
-        if (pangrams.isEmpty()) {
-            return null;
-        }
 
-        if (!matchesDifficultyBand(validDisplay.size(), pangrams.size(), targetDifficulty)) {
-            return null;
+        boolean ok = randomBand
+                ? difficultyGate.passesRandomBand(targetDifficulty, validDisplay.size(), pangrams.size())
+                : difficultyGate.passes(targetDifficulty, validDisplay.size(), pangrams.size());
+        if (!ok) {
+            return Optional.empty();
         }
 
         List<String> letterStrs = pool.stream().map(String::valueOf).collect(Collectors.toList());
@@ -113,7 +142,7 @@ public class PuzzleGenerationService {
         var rewards = rewardsFor(targetDifficulty);
         int target = rewards.targetWords();
 
-        return Puzzle.builder()
+        return Optional.of(Puzzle.builder()
                 .puzzleDate(null)
                 .letters(letterStrs)
                 .centerLetter(String.valueOf(center))
@@ -130,7 +159,22 @@ public class PuzzleGenerationService {
                 .generationBatchId(batchId)
                 .dictionarySourceVersion(dictionaryProperties.getSourceVersion())
                 .active(true)
-                .build();
+                .build());
+    }
+
+    /** Persist candidate if fingerprint is new; returns empty if duplicate. */
+    @Transactional
+    public Optional<Puzzle> saveNewCandidate(Puzzle candidate) {
+        if (candidate == null || candidate.getFingerprint() == null) {
+            return Optional.empty();
+        }
+        if (puzzleRepository.existsByFingerprint(candidate.getFingerprint())) {
+            return Optional.empty();
+        }
+        // saveAndFlush: JDBC batching otherwise inserts puzzle_words before puzzles (FK 23503)
+        Puzzle saved = puzzleRepository.saveAndFlush(candidate);
+        snapshotService.replaceSnapshot(saved, saved.getValidWords(), saved.getPangrams());
+        return Optional.of(saved);
     }
 
     public static String fingerprint(List<String> letters, String center, PuzzleDifficulty difficulty) {
@@ -148,29 +192,44 @@ public class PuzzleGenerationService {
         }
     }
 
-    private void ensureDictionaryReady() {
-        if (dictionaryService.allowedCount() == 0) {
-            throw new IllegalStateException(
-                    "Local word dictionary is empty. Run with --import-dictionary after configuring wordquest.dictionary.path");
+    public boolean isDictionaryReady() {
+        return dictionaryService.allowedCount() >= properties.getGeneration().getMinDictionaryWords();
+    }
+
+    /**
+     * Strict check for admin/API: dictionary must meet configured minimum for quality lists.
+     */
+    public void requireDictionaryReady() {
+        long count = dictionaryService.allowedCount();
+        long min = properties.getGeneration().getMinDictionaryWords();
+        if (count == 0) {
+            throw new ValidationException(
+                    "Word dictionary is empty. Import an English open-source lexicon "
+                            + "(Admin → Dictionary → Import) before generating puzzles.");
+        }
+        if (count < min) {
+            throw new ValidationException(
+                    "Word dictionary has only " + count + " words; need at least " + min
+                            + " for quality puzzle generation. Wait for import or import SCOWL/ESDB.");
         }
     }
 
-    private boolean matchesDifficultyBand(int wordCount, int pangramCount, PuzzleDifficulty d) {
-        return switch (d) {
-            case EASY -> wordCount >= 10 && wordCount <= 18;
-            case MEDIUM -> wordCount >= 15 && wordCount <= 28;
-            case HARD -> wordCount >= 22 && wordCount <= 40;
-            case EXPERT -> wordCount >= 25 || pangramCount >= 2;
-        };
-    }
-
-    private int targetWords(PuzzleDifficulty d) {
-        return switch (d) {
-            case EASY -> RewardConstants.EASY_TARGET_WORDS;
-            case MEDIUM -> RewardConstants.MEDIUM_TARGET_WORDS;
-            case HARD -> RewardConstants.HARD_TARGET_WORDS;
-            case EXPERT -> RewardConstants.EXPERT_TARGET_WORDS;
-        };
+    private List<Character> normalizePool(List<Character> letters, char centerLetter) {
+        LinkedHashSet<Character> set = new LinkedHashSet<>();
+        char center = Character.toUpperCase(centerLetter);
+        set.add(center);
+        if (letters != null) {
+            for (Character c : letters) {
+                if (c == null) {
+                    continue;
+                }
+                char u = Character.toUpperCase(c);
+                if (u >= 'A' && u <= 'Z') {
+                    set.add(u);
+                }
+            }
+        }
+        return new ArrayList<>(set);
     }
 
     private GameEconomy.DifficultyRewards rewardsFor(PuzzleDifficulty d) {

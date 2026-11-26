@@ -1,0 +1,21 @@
+# Active by default (spring.profiles.default=local). Safe for docker-compose Postgres/Redis.
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+app:
+  seed:
+    local-admin: true
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+logging:
+  level:
+    com.kungfu.wordquest: DEBUG

@@ -5,7 +5,7 @@ export interface AdminOverview {
   adminCount: number;
   puzzleCount: number;
   activePuzzleCount: number;
-  todayDailyPuzzleId: string | null;
+  todayDailyPuzzleId: number | string | null;
   todayDailyDate: string | null;
   dictionaryAllowedCount: number;
   dictionarySourceVersion: string | null;
@@ -43,7 +43,8 @@ export interface PageResponse<T> {
 }
 
 export interface AdminPuzzleSummary {
-  id: string;
+  /** Simple BIGINT primary key */
+  id: number;
   difficulty: string;
   letters: string[];
   centerLetter: string;
@@ -68,7 +69,7 @@ export interface AdminPuzzleDetail extends AdminPuzzleSummary {
 
 export interface AdminDaily {
   scheduledDate: string;
-  puzzleId: string;
+  puzzleId: number;
   difficulty: string;
   letters: string[];
   centerLetter: string;
@@ -105,6 +106,41 @@ export interface DictionaryImportResult {
   updated: number;
 }
 
+export interface DictionaryImportProgress {
+  status: 'IDLE' | 'RUNNING' | 'COMPLETED' | 'FAILED' | string;
+  message?: string;
+  processed: number;
+  accepted: number;
+  rejected: number;
+  duplicates: number;
+  updated: number;
+  allowedCount: number;
+  source?: string;
+  sourceVersion?: string;
+}
+
+export interface AdminAiStatus {
+  groqConfigured: boolean;
+  dictionaryReady: boolean;
+  dictionaryAllowedCount: number;
+  minDictionaryWords: number;
+  model: string;
+  easyGate: string;
+  mediumGate: string;
+  hardGate: string;
+  expertGate: string;
+}
+
+export interface AdminAiGenerateResult {
+  batchId: string;
+  difficulty: string;
+  requested: number;
+  created: number;
+  groqUsed: boolean;
+  puzzles: AdminPuzzleDetail[];
+  rejected: string[];
+}
+
 export const adminApi = {
   overview: () => apiRequest<AdminOverview>('/api/v1/admin/overview'),
 
@@ -128,7 +164,7 @@ export const adminApi = {
     return apiRequest<PageResponse<AdminPuzzleSummary>>(`/api/v1/admin/puzzles?${params}`);
   },
 
-  getPuzzle: (id: string) => apiRequest<AdminPuzzleDetail>(`/api/v1/admin/puzzles/${id}`),
+  getPuzzle: (id: number) => apiRequest<AdminPuzzleDetail>(`/api/v1/admin/puzzles/${id}`),
 
   generatePuzzle: (difficulty: string) =>
     apiRequest<AdminPuzzleDetail>(
@@ -136,7 +172,15 @@ export const adminApi = {
       { method: 'POST' }
     ),
 
-  setPuzzleActive: (id: string, active: boolean) =>
+  aiStatus: () => apiRequest<AdminAiStatus>('/api/v1/admin/puzzles/ai-status'),
+
+  generatePuzzlesWithAi: (difficulty: string, count = 5) =>
+    apiRequest<AdminAiGenerateResult>(
+      `/api/v1/admin/puzzles/generate-ai?difficulty=${encodeURIComponent(difficulty)}&count=${count}`,
+      { method: 'POST' }
+    ),
+
+  setPuzzleActive: (id: number, active: boolean) =>
     apiRequest<AdminPuzzleDetail>(`/api/v1/admin/puzzles/${id}/active`, {
       method: 'PATCH',
       body: JSON.stringify({ active }),
@@ -147,8 +191,8 @@ export const adminApi = {
     return apiRequest<AdminDaily>(`/api/v1/admin/daily${q}`);
   },
 
-  assignDaily: (puzzleId: string, date?: string) => {
-    const params = new URLSearchParams({ puzzleId });
+  assignDaily: (puzzleId: number, date?: string) => {
+    const params = new URLSearchParams({ puzzleId: String(puzzleId) });
     if (date) params.set('date', date);
     return apiRequest<AdminDaily>(`/api/v1/admin/daily/assign?${params}`, { method: 'POST' });
   },
@@ -183,6 +227,10 @@ export const adminApi = {
 
   dictionaryStats: () => apiRequest<AdminOverview>('/api/v1/admin/dictionary/stats'),
 
+  /** Starts background chunked import — poll importDictionaryStatus. */
   importDictionary: () =>
-    apiRequest<DictionaryImportResult>('/api/v1/admin/dictionary/import', { method: 'POST' }),
+    apiRequest<DictionaryImportProgress>('/api/v1/admin/dictionary/import', { method: 'POST' }),
+
+  importDictionaryStatus: () =>
+    apiRequest<DictionaryImportProgress>('/api/v1/admin/dictionary/import/status'),
 };

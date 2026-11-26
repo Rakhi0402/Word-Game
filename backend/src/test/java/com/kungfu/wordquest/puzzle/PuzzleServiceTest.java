@@ -85,7 +85,7 @@ class PuzzleServiceTest {
                 .stats(UserStats.builder().build())
                 .build();
         puzzle = Puzzle.builder()
-                .id(UUID.randomUUID())
+                .id(1L)
                 .letters(List.of("A", "D", "N", "P", "S", "T", "G"))
                 .centerLetter("A")
                 .validWords(List.of("PANDA", "SAND", "SPAN", "SNAP", "PAST", "SPAT", "PANS", "PATS", "NAPS", "TAGS"))
@@ -171,7 +171,7 @@ class PuzzleServiceTest {
     void getByDifficulty_includesExpert() {
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         Puzzle expert = Puzzle.builder()
-                .id(UUID.randomUUID())
+                .id(2L)
                 .letters(List.of("B", "L", "A", "C", "K", "E", "T"))
                 .centerLetter("A")
                 .validWords(List.of("BLACK", "TABLE", "BLANKET", "CABLE", "LAKE", "BAKE", "CAKE", "TALE", "LATE", "BEAT",

@@ -4,45 +4,145 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.Resource;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
- * Offline ESDB/SCOWL (word-per-line) importer. Idempotent upsert on normalized_word.
- * Does not run on every application start unless seed-if-empty / CLI flag.
+ * Offline ESDB/SCOWL importer using chunked JDBC upserts (not one giant JPA transaction).
+ * Admin UI starts this asynchronously and polls {@link #getProgress()}.
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class DictionaryImportService {
 
-    private final WordDictionaryRepository repository;
+    private static final int CHUNK_SIZE = 1_000;
+
     private final WordNormalizer normalizer;
     private final DictionaryService dictionaryService;
     private final DictionaryProperties properties;
+    private final JdbcTemplate jdbcTemplate;
+    private final PlatformTransactionManager transactionManager;
 
-    @Transactional
+    private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicReference<String> status = new AtomicReference<>("IDLE");
+    private final AtomicReference<String> message = new AtomicReference<>("");
+    private final AtomicLong processed = new AtomicLong();
+    private final AtomicLong accepted = new AtomicLong();
+    private final AtomicLong rejected = new AtomicLong();
+    private final AtomicLong duplicates = new AtomicLong();
+    private final AtomicLong updated = new AtomicLong();
+    private final AtomicReference<String> lastSource = new AtomicReference<>("");
+    private final AtomicReference<String> lastVersion = new AtomicReference<>("");
+
+    public DictionaryImportProgress getProgress() {
+        return DictionaryImportProgress.builder()
+                .status(status.get())
+                .message(message.get())
+                .processed(processed.get())
+                .accepted(accepted.get())
+                .rejected(rejected.get())
+                .duplicates(duplicates.get())
+                .updated(updated.get())
+                .allowedCount(dictionaryService.allowedCount())
+                .source(lastSource.get())
+                .sourceVersion(lastVersion.get())
+                .build();
+    }
+
+    public boolean isRunning() {
+        return running.get();
+    }
+
+    /** Synchronous import (startup / CLI). Chunked — does not hang one HTTP request. */
     public DictionaryImportResult importFromConfiguredSource() {
         return importFromPath(properties.getPath(), properties.getSource(), properties.getSourceVersion());
     }
 
-    @Transactional
     public DictionaryImportResult importFromPath(String path, String source, String sourceVersion) {
+        resetCounters(source, sourceVersion);
+        status.set("RUNNING");
+        message.set("Importing dictionary…");
+        running.set(true);
+        try {
+            DictionaryImportResult result = doImport(path, source, sourceVersion, null);
+            status.set("COMPLETED");
+            message.set("Import finished");
+            return result;
+        } catch (Exception e) {
+            status.set("FAILED");
+            message.set(e.getMessage() != null ? e.getMessage() : "Import failed");
+            throw e instanceof RuntimeException re ? re : new IllegalStateException(e);
+        } finally {
+            running.set(false);
+        }
+    }
+
+    /**
+     * Background import used by admin. Safe to call repeatedly — second call is rejected while running.
+     */
+    public boolean startAsyncImport() {
+        if (!running.compareAndSet(false, true)) {
+            return false;
+        }
+        resetCounters(properties.getSource(), properties.getSourceVersion());
+        status.set("RUNNING");
+        message.set("Import started");
+        Thread t = new Thread(() -> {
+            try {
+                doImport(properties.getPath(), properties.getSource(), properties.getSourceVersion(),
+                        p -> { /* counters already updated */ });
+                status.set("COMPLETED");
+                message.set("Import finished");
+            } catch (Exception e) {
+                log.error("Async dictionary import failed: {}", e.getMessage(), e);
+                status.set("FAILED");
+                message.set(e.getMessage() != null ? e.getMessage() : "Import failed");
+            } finally {
+                running.set(false);
+            }
+        }, "dictionary-import");
+        t.setDaemon(true);
+        t.start();
+        return true;
+    }
+
+    private void resetCounters(String source, String version) {
+        processed.set(0);
+        accepted.set(0);
+        rejected.set(0);
+        duplicates.set(0);
+        updated.set(0);
+        lastSource.set(source != null ? source : "");
+        lastVersion.set(version != null ? version : "");
+    }
+
+    private DictionaryImportResult doImport(
+            String path,
+            String source,
+            String sourceVersion,
+            Consumer<DictionaryImportProgress> onChunk) {
         Map<String, Double> frequencies = loadFrequencies();
-        long processed = 0;
-        long accepted = 0;
-        long rejected = 0;
-        long duplicates = 0;
-        long updated = 0;
         Set<String> seenInFile = new HashSet<>();
 
         Resource resource = new DefaultResourceLoader().getResource(path);
@@ -50,68 +150,70 @@ public class DictionaryImportService {
             throw new IllegalStateException("Dictionary resource not found: " + path);
         }
 
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        List<Object[]> batch = new ArrayList<>(CHUNK_SIZE);
+        Timestamp now = Timestamp.from(Instant.now());
+
         try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8))) {
+                new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8), 64 * 1024)) {
             String line;
             while ((line = reader.readLine()) != null) {
-                processed++;
+                processed.incrementAndGet();
                 var normalizedOpt = normalizer.normalize(line);
                 if (normalizedOpt.isEmpty()) {
-                    rejected++;
+                    rejected.incrementAndGet();
                     continue;
                 }
                 String normalized = normalizedOpt.get();
                 if (normalized.length() < properties.getMinWordLength()
                         || normalized.length() > properties.getMaxWordLength()) {
-                    rejected++;
+                    rejected.incrementAndGet();
                     continue;
                 }
                 if (properties.getFilter().isRejectProperNouns() && looksLikeProperNoun(line)) {
-                    rejected++;
+                    rejected.incrementAndGet();
                     continue;
                 }
                 if (!seenInFile.add(normalized)) {
-                    duplicates++;
+                    duplicates.incrementAndGet();
                     continue;
                 }
 
                 Double freq = frequencies.get(normalized);
-                boolean freqFromFile = freq != null;
                 if (freq == null) {
                     freq = fallbackFrequency(normalized.length());
                 }
                 VocabularyDifficulty difficulty = dictionaryService.classifyDifficulty(freq, normalized.length());
 
-                var existing = repository.findByNormalizedWord(normalized);
-                if (existing.isPresent()) {
-                    WordDictionaryEntry e = existing.get();
-                    e.setWord(normalized);
-                    e.setWordLength(normalized.length());
-                    e.setFrequencyScore(freq);
-                    e.setDifficulty(difficulty);
-                    e.setSource(source);
-                    e.setSourceVersion(sourceVersion);
-                    e.setAllowed(true);
-                    if (freqFromFile) {
-                        e.setFrequencyRank(null);
+                batch.add(new Object[]{
+                        UUID.randomUUID(),
+                        normalized,
+                        normalized,
+                        normalized.length(),
+                        freq,
+                        difficulty.name(),
+                        source,
+                        sourceVersion,
+                        true,
+                        now,
+                        now
+                });
+
+                if (batch.size() >= CHUNK_SIZE) {
+                    flushChunk(tx, batch);
+                    batch.clear();
+                    message.set("Imported " + accepted.get() + " words…");
+                    if (onChunk != null) {
+                        onChunk.accept(getProgress());
                     }
-                    repository.save(e);
-                    updated++;
-                    accepted++;
-                } else {
-                    repository.save(WordDictionaryEntry.builder()
-                            .word(normalized)
-                            .normalizedWord(normalized)
-                            .wordLength(normalized.length())
-                            .frequencyScore(freq)
-                            .frequencyRank(null)
-                            .difficulty(difficulty)
-                            .source(source)
-                            .sourceVersion(sourceVersion)
-                            .allowed(true)
-                            .build());
-                    accepted++;
+                    if (processed.get() % 10_000 == 0) {
+                        log.info("Dictionary import progress: processed={} accepted={}",
+                                processed.get(), accepted.get());
+                    }
                 }
+            }
+            if (!batch.isEmpty()) {
+                flushChunk(tx, batch);
             }
         } catch (IllegalStateException e) {
             throw e;
@@ -119,17 +221,14 @@ public class DictionaryImportService {
             throw new IllegalStateException("Dictionary import failed from " + path + ": " + e.getMessage(), e);
         }
 
-        // Assign dense ranks by descending frequency among accepted allowed words (best-effort).
-        assignFrequencyRanks();
-
         DictionaryImportResult result = DictionaryImportResult.builder()
                 .source(source)
                 .sourceVersion(sourceVersion)
-                .processed(processed)
-                .accepted(accepted)
-                .rejected(rejected)
-                .duplicates(duplicates)
-                .updated(updated)
+                .processed(processed.get())
+                .accepted(accepted.get())
+                .rejected(rejected.get())
+                .duplicates(duplicates.get())
+                .updated(updated.get())
                 .build();
 
         log.info(
@@ -144,22 +243,35 @@ public class DictionaryImportService {
         return result;
     }
 
-    private void assignFrequencyRanks() {
-        var all = repository.findAll().stream()
-                .filter(WordDictionaryEntry::isAllowed)
-                .sorted((a, b) -> {
-                    double fa = a.getFrequencyScore() != null ? a.getFrequencyScore() : 0;
-                    double fb = b.getFrequencyScore() != null ? b.getFrequencyScore() : 0;
-                    int cmp = Double.compare(fb, fa);
-                    if (cmp != 0) return cmp;
-                    return a.getNormalizedWord().compareTo(b.getNormalizedWord());
-                })
-                .toList();
-        int rank = 1;
-        for (WordDictionaryEntry e : all) {
-            e.setFrequencyRank(rank++);
-            repository.save(e);
-        }
+    private void flushChunk(TransactionTemplate tx, List<Object[]> batch) {
+        List<Object[]> copy = new ArrayList<>(batch);
+        tx.executeWithoutResult(status -> {
+            int[] counts = jdbcTemplate.batchUpdate("""
+                    INSERT INTO word_dictionary (
+                        id, word, normalized_word, word_length, frequency_score, frequency_rank,
+                        difficulty, source, source_version, allowed, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (normalized_word) DO UPDATE SET
+                        word = EXCLUDED.word,
+                        word_length = EXCLUDED.word_length,
+                        frequency_score = EXCLUDED.frequency_score,
+                        difficulty = EXCLUDED.difficulty,
+                        source = EXCLUDED.source,
+                        source_version = EXCLUDED.source_version,
+                        allowed = TRUE,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    copy);
+            // batchUpdate returns 1 for insert, 1 or 2 for update depending on driver — count as accepted
+            for (int c : counts) {
+                if (c > 0) {
+                    accepted.incrementAndGet();
+                    if (c > 1) {
+                        updated.incrementAndGet();
+                    }
+                }
+            }
+        });
     }
 
     private Map<String, Double> loadFrequencies() {
@@ -203,15 +315,10 @@ public class DictionaryImportService {
         return map;
     }
 
-    /** Length-based fallback — never rejects a valid lexicon word. */
     static double fallbackFrequency(int length) {
         return Math.max(0.05, 1.0 - Math.max(0, length - 4) * 0.08);
     }
 
-    /**
-     * Heuristic: source line starts with uppercase Latin letter and is not all-caps acronym of length&lt;=3.
-     * SCOWL 60+ often already lowercases; seed lists are lowercase.
-     */
     private boolean looksLikeProperNoun(String rawLine) {
         String t = rawLine.trim();
         if (t.isEmpty()) {
@@ -221,9 +328,8 @@ public class DictionaryImportService {
         if (c >= 'A' && c <= 'Z') {
             String upper = t.toUpperCase(Locale.ROOT);
             if (t.equals(upper) && t.length() <= 3) {
-                return true; // abbreviation
+                return true;
             }
-            // Title Case proper noun in some word lists
             if (!t.equals(t.toLowerCase(Locale.ROOT))) {
                 return true;
             }

@@ -82,13 +82,13 @@ export interface FoundWord {
 }
 
 export interface DailyPuzzle {
-  id: string;
+  /** Server BIGINT puzzle id */
+  id: number;
   letters: string[];
   centerLetter: string;
-  /** Never authoritative from API — kept optional for legacy UI that counted totals. */
+  /** Answer list for local validation (from API / IDB cache). */
   validWords?: string[];
   pangrams?: string[];
-  /** Count of pangrams in the puzzle (from API; not the words). */
   pangramCount?: number;
   difficulty: PuzzleDifficulty;
   xpReward: number;

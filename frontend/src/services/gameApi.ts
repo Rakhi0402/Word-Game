@@ -13,12 +13,18 @@ import type {
 import type { ProfileResponse } from '../types/profile';
 import type { DailyPuzzle, PuzzleDifficulty } from '../types';
 import { DIFFICULTY_CONFIG } from '../constants/rewards';
+import { cachedGet, cachedSet } from './cache/clientCache';
+import { CacheTags, CacheTTL, cacheKey, todayKey } from './cache/cacheKeys';
+import {
+  invalidateAfterCollectionChange,
+  invalidateAfterGameplay,
+  invalidateAfterReset,
+} from './cache/invalidateGameCache';
 
 const formatDifficulty = (raw: string | undefined | null): PuzzleDifficulty => {
   if (!raw) return 'Medium';
   const n = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
   if (n === 'Easy' || n === 'Medium' || n === 'Hard' || n === 'Expert') return n;
-  // Backend may send EASY/MEDIUM/HARD/EXPERT
   const upper = raw.toUpperCase();
   if (upper === 'EASY') return 'Easy';
   if (upper === 'MEDIUM') return 'Medium';
@@ -28,24 +34,24 @@ const formatDifficulty = (raw: string | undefined | null): PuzzleDifficulty => {
 };
 
 export const mapBackendPuzzle = (p: BackendPuzzle, progress?: BackendPuzzleView['progress']): DailyPuzzle => {
+  const puzzleId = typeof p.id === 'number' ? p.id : Number(p.id);
   const difficulty = formatDifficulty(p.difficulty);
   const cfg = DIFFICULTY_CONFIG[difficulty];
-  // Prefer server target when present; otherwise fall back to difficulty rules.
-  // Never invent a higher target than the rule table for the resolved difficulty.
   const ruleTarget = cfg.targetWords;
   const serverTarget = p.targetWordCount ?? progress?.targetWordCount;
   const targetWordCount =
     typeof serverTarget === 'number' && serverTarget > 0
       ? Math.min(serverTarget, ruleTarget)
       : ruleTarget;
-  const mapped = {
-    id: p.id,
+  const validWords = (p.validWords || []).map((w) => w.toUpperCase());
+  const pangrams = (p.pangrams || []).map((w) => w.toUpperCase());
+  return {
+    id: puzzleId,
     letters: (p.letters || []).map((l) => l.toUpperCase()),
     centerLetter: (p.centerLetter || '').toUpperCase(),
-    // Never trust answer keys from the wire — leave empty even if leaked
-    validWords: [],
-    pangrams: [],
-    pangramCount: p.pangramCount ?? 0,
+    validWords,
+    pangrams,
+    pangramCount: p.pangramCount ?? pangrams.length,
     difficulty,
     xpReward: p.xpReward ?? cfg.baseXp,
     coinReward: p.coinReward ?? cfg.baseCoins,
@@ -60,29 +66,54 @@ export const mapBackendPuzzle = (p: BackendPuzzle, progress?: BackendPuzzleView[
     hintsUsed: progress?.hintsUsed ?? 0,
     status: progress?.status,
   };
-  return mapped;
 };
 
 const mapPuzzleView = (view: BackendPuzzleView): DailyPuzzle =>
   mapBackendPuzzle(view.puzzle, view.progress);
 
 export const puzzleService = {
-  getDailyPuzzle: async () => {
-    const data = await apiRequest<BackendPuzzleView>('/api/v1/puzzles/daily', { method: 'GET' });
+  getDailyPuzzle: async (opts?: { force?: boolean }) => {
+    const key = cacheKey(['puzzle', 'daily', todayKey()]);
+    const data = await cachedGet(
+      key,
+      () => apiRequest<BackendPuzzleView>('/api/v1/puzzles/daily', { method: 'GET' }),
+      {
+        ttlMs: CacheTTL.DAILY_PUZZLE,
+        tags: [CacheTags.PUZZLE],
+        force: opts?.force,
+        store: 'idb',
+      }
+    );
     return { success: true as const, data: mapPuzzleView(data) };
   },
 
-  startSession: (puzzleId: string) =>
-    apiRequest<unknown>(`/api/v1/puzzles/session/start?puzzleId=${encodeURIComponent(puzzleId)}`, {
-      method: 'POST',
-    }),
+  /** Persist updated puzzle progress locally after submit/hint without another GET. */
+  putDailyPuzzleView: async (view: BackendPuzzleView) => {
+    const key = cacheKey(['puzzle', 'daily', todayKey()]);
+    await cachedSet(key, view, {
+      ttlMs: CacheTTL.DAILY_PUZZLE,
+      tags: [CacheTags.PUZZLE],
+      store: 'idb',
+    });
+  },
 
-  submitWord: async (puzzleId: string, word: string) => {
-    const q = new URLSearchParams({ puzzleId, word });
+  startSession: (puzzleId: number | string) =>
+    apiRequest<unknown>(
+      `/api/v1/puzzles/session/start?puzzleId=${encodeURIComponent(String(puzzleId))}`,
+      {
+        method: 'POST',
+      }
+    ),
+
+  submitWord: async (puzzleId: number | string, word: string) => {
+    const q = new URLSearchParams({ puzzleId: String(puzzleId), word });
     const data = await apiRequest<BackendSubmitWordResult>(
       `/api/v1/puzzles/session/submit?${q.toString()}`,
       { method: 'POST' }
     );
+    if (data.completed) {
+      await invalidateAfterGameplay();
+    }
     return {
       success: true as const,
       data: {
@@ -105,21 +136,82 @@ export const puzzleService = {
     };
   },
 
-  revealHint: (puzzleId: string) =>
-    apiRequest<string>(
-      `/api/v1/puzzles/session/hint?puzzleId=${encodeURIComponent(puzzleId)}`,
-      { method: 'POST' }
-    ),
-
-  getPuzzleByDifficulty: async (difficulty: PuzzleDifficulty) => {
-    const q = new URLSearchParams({ difficulty: difficulty.toUpperCase() });
-    const data = await apiRequest<BackendPuzzleView>(`/api/v1/puzzles?${q.toString()}`, {
-      method: 'GET',
+  /** Authoritative sync after local Spelling Bee–style play. */
+  syncProgress: async (
+    puzzleId: number | string,
+    foundWords: string[],
+    score?: number,
+    streak?: number
+  ) => {
+    const data = await apiRequest<{
+      completed: boolean;
+      score: number;
+      streak: number;
+      foundWords: string[];
+      wordsFoundCount: number;
+      targetWordCount: number;
+      xpAwarded: number;
+      coinsAwarded: number;
+      totalXp: number;
+      totalCoins: number;
+      belt: string;
+    }>('/api/v1/puzzles/session/sync', {
+      method: 'POST',
+      body: JSON.stringify({ puzzleId, foundWords, score, streak }),
     });
+    if (data.completed) {
+      await invalidateAfterGameplay();
+    }
+    return data;
+  },
+
+  /** Warm IDB with up to 10 puzzle definitions per difficulty (includes word lists). */
+  warmPuzzlePool: async (difficulty: PuzzleDifficulty) => {
+    const key = cacheKey(['puzzle', 'pool', difficulty, todayKey()]);
+    return cachedGet(
+      key,
+      () =>
+        apiRequest<BackendPuzzle[]>(
+          `/api/v1/puzzles/pool?difficulty=${encodeURIComponent(difficulty.toUpperCase())}&limit=10`,
+          { method: 'GET' }
+        ),
+      {
+        ttlMs: CacheTTL.PUZZLE_POOL,
+        tags: [CacheTags.PUZZLE],
+        store: 'idb',
+      }
+    );
+  },
+
+  revealHint: async (puzzleId: number | string) => {
+    const word = await apiRequest<string>(
+      `/api/v1/puzzles/session/hint?puzzleId=${encodeURIComponent(String(puzzleId))}`,
+      { method: 'POST' }
+    );
+    await invalidateAfterGameplay();
+    return word;
+  },
+
+  getPuzzleByDifficulty: async (difficulty: PuzzleDifficulty, opts?: { force?: boolean }) => {
+    const key = cacheKey(['puzzle', 'choice', difficulty, todayKey()]);
+    const q = new URLSearchParams({ difficulty: difficulty.toUpperCase() });
+    const data = await cachedGet(
+      key,
+      () =>
+        apiRequest<BackendPuzzleView>(`/api/v1/puzzles?${q.toString()}`, {
+          method: 'GET',
+        }),
+      {
+        ttlMs: CacheTTL.CHOICE_PUZZLE,
+        tags: [CacheTags.PUZZLE],
+        force: opts?.force,
+        store: 'session',
+      }
+    );
     return { success: true as const, data: mapPuzzleView(data) };
   },
 
-  getPuzzleById: async (_puzzleId: string) => ({
+  getPuzzleById: async (_puzzleId: number | string) => ({
     success: false as const,
     data: null,
     message: 'Puzzle lookup by id is not available; use daily or difficulty endpoints.',
@@ -127,41 +219,91 @@ export const puzzleService = {
 };
 
 export const cardService = {
-  getAllCards: () => apiRequest<BackendCard[]>('/api/v1/cards', { method: 'GET' }),
+  getAllCards: (opts?: { force?: boolean }) =>
+    cachedGet(
+      'cards:catalog',
+      () => apiRequest<BackendCard[]>('/api/v1/cards', { method: 'GET' }),
+      {
+        ttlMs: CacheTTL.CARDS_CATALOG,
+        tags: [CacheTags.CARDS],
+        force: opts?.force,
+        store: 'idb',
+        scopedToUser: false,
+      }
+    ),
 
-  getInventory: () =>
-    apiRequest<CollectionResponse>('/api/v1/cards/inventory', {
-      method: 'GET',
-    }),
+  getInventory: (opts?: { force?: boolean }) =>
+    cachedGet(
+      'inventory',
+      () =>
+        apiRequest<CollectionResponse>('/api/v1/cards/inventory', {
+          method: 'GET',
+        }),
+      {
+        ttlMs: CacheTTL.COLLECTION,
+        tags: [CacheTags.COLLECTION],
+        force: opts?.force,
+        store: 'idb',
+      }
+    ),
 
-  getCollection: () =>
-    apiRequest<CollectionResponse>('/api/v1/users/me/collection', {
-      method: 'GET',
-    }),
+  getCollection: (opts?: { force?: boolean }) =>
+    cachedGet(
+      'collection',
+      () =>
+        apiRequest<CollectionResponse>('/api/v1/users/me/collection', {
+          method: 'GET',
+        }),
+      {
+        ttlMs: CacheTTL.COLLECTION,
+        tags: [CacheTags.COLLECTION],
+        force: opts?.force,
+        store: 'idb',
+      }
+    ),
 
-  drawCard: () =>
-    apiRequest<BackendDrawResult>('/api/v1/cards/draw', { method: 'POST' }),
+  drawCard: async () => {
+    const result = await apiRequest<BackendDrawResult>('/api/v1/cards/draw', { method: 'POST' });
+    await invalidateAfterCollectionChange();
+    return result;
+  },
 
-  equipCard: (cardId: string) =>
-    apiRequest<CollectionResponse>(
+  equipCard: async (cardId: string) => {
+    const result = await apiRequest<CollectionResponse>(
       `/api/v1/cards/equip?cardId=${encodeURIComponent(cardId)}`,
       { method: 'POST' }
-    ),
+    );
+    await invalidateAfterCollectionChange();
+    await cachedSet('collection', result, {
+      ttlMs: CacheTTL.COLLECTION,
+      tags: [CacheTags.COLLECTION],
+      store: 'idb',
+    });
+    return result;
+  },
 };
 
 export const leaderboardService = {
-  getLeaderboard: (page = 0, size = 20) =>
-    apiRequest<BackendLeaderboardPage>(
-      `/api/v1/leaderboard?page=${page}&size=${size}`,
-      { method: 'GET' }
+  getLeaderboard: (page = 0, size = 20, opts?: { force?: boolean }) =>
+    cachedGet(
+      cacheKey(['leaderboard', page, size]),
+      () =>
+        apiRequest<BackendLeaderboardPage>(
+          `/api/v1/leaderboard?page=${page}&size=${size}`,
+          { method: 'GET' }
+        ),
+      {
+        ttlMs: CacheTTL.LEADERBOARD,
+        tags: [CacheTags.LEADERBOARD],
+        force: opts?.force,
+        store: 'idb',
+      }
     ),
 
-  /** Legacy limit query — backend maps to first page. */
   getTop: (limit = 20) =>
-    apiRequest<BackendLeaderboardPage>(
-      `/api/v1/leaderboard?limit=${limit}`,
-      { method: 'GET' }
-    ),
+    apiRequest<BackendLeaderboardPage>(`/api/v1/leaderboard?limit=${limit}`, {
+      method: 'GET',
+    }),
 
   getMyStanding: () =>
     apiRequest<BackendLeaderboardMe>('/api/v1/leaderboard/me', { method: 'GET' }),
@@ -175,13 +317,25 @@ export const leaderboardService = {
 };
 
 export const achievementService = {
-  getAchievements: () =>
-    apiRequest<BackendUserAchievement[]>('/api/v1/achievements', { method: 'GET' }),
+  getAchievements: (opts?: { force?: boolean }) =>
+    cachedGet(
+      'achievements',
+      () => apiRequest<BackendUserAchievement[]>('/api/v1/achievements', { method: 'GET' }),
+      {
+        ttlMs: CacheTTL.ACHIEVEMENTS,
+        tags: [CacheTags.ACHIEVEMENTS],
+        force: opts?.force,
+        store: 'idb',
+      }
+    ),
 
-  evaluate: () =>
-    apiRequest<BackendUserAchievement[]>('/api/v1/achievements/evaluate', {
+  evaluate: async () => {
+    const result = await apiRequest<BackendUserAchievement[]>('/api/v1/achievements/evaluate', {
       method: 'POST',
-    }),
+    });
+    await invalidateAfterGameplay();
+    return result;
+  },
 };
 
 export const profileService = {
@@ -196,22 +350,33 @@ export const profileService = {
       coins?: number;
     }>('/api/v1/users/me', { method: 'GET' }),
 
-  /** Full Profile aggregate for the authenticated user. */
-  getProfile: () =>
-    apiRequest<ProfileResponse>('/api/v1/users/me/profile', {
-      method: 'GET',
-    }),
+  getProfile: (opts?: { force?: boolean }) =>
+    cachedGet(
+      'profile',
+      () =>
+        apiRequest<ProfileResponse>('/api/v1/users/me/profile', {
+          method: 'GET',
+        }),
+      {
+        ttlMs: CacheTTL.PROFILE,
+        tags: [CacheTags.PROFILE, CacheTags.ACHIEVEMENTS],
+        force: opts?.force,
+        store: 'idb',
+      }
+    ),
 
-  resetProgression: () =>
-    apiRequest<{
+  resetProgression: async () => {
+    const result = await apiRequest<{
       userId: string;
       userName: string;
       userEmail: string;
       belt?: string;
       xp?: number;
       coins?: number;
-    }>('/api/v1/users/reset', { method: 'POST' }),
+    }>('/api/v1/users/reset', { method: 'POST' });
+    await invalidateAfterReset();
+    return result;
+  },
 };
 
-// Re-export settings facade for account operations
 export { settingsService } from './settingsService';

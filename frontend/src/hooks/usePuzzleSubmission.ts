@@ -3,6 +3,7 @@ import { useAppDispatch, useAppSelector } from '../store';
 import { submitWordSuccess, submitWordFailure } from '../store/puzzleSlice';
 import { puzzleService } from '../services/puzzleService';
 import { ApiClientError } from '../types/auth';
+import { validateWordLocally } from '../utils/localPuzzleValidate';
 
 const REASON_MESSAGES: Record<string, string> = {
   too_short: 'Too short (min 4 letters)',
@@ -16,6 +17,68 @@ const usePuzzleSubmission = () => {
   const dispatch = useAppDispatch();
   const puzzle = useAppSelector((state) => state.puzzle);
   const submittingRef = useRef(false);
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncInFlightRef = useRef(false);
+  const pendingSyncRef = useRef<{
+    puzzleId: number | string;
+    foundWords: string[];
+    score: number;
+    streak: number;
+  } | null>(null);
+
+  const flushSync = useCallback(async () => {
+    if (syncInFlightRef.current) return null;
+    const pending = pendingSyncRef.current;
+    if (!pending) return null;
+    pendingSyncRef.current = null;
+    syncInFlightRef.current = true;
+    try {
+      // syncProgress creates the session idempotently — do not call startSession first
+      // (that races with sync and hits uk(user_id, puzzle_id)).
+      const data = await puzzleService.syncProgress(
+        pending.puzzleId,
+        pending.foundWords,
+        pending.score,
+        pending.streak
+      );
+      if (data.completed) {
+        dispatch(
+          submitWordSuccess({
+            text: '',
+            score: 0,
+            isPangram: false,
+            serverCompleted: true,
+            xpAwarded: data.xpAwarded ?? 0,
+            coinsAwarded: data.coinsAwarded ?? 0,
+          })
+        );
+      }
+      return data;
+    } catch {
+      return null;
+    } finally {
+      syncInFlightRef.current = false;
+      // If another sync was queued while we were in flight, flush it.
+      if (pendingSyncRef.current) {
+        void flushSync();
+      }
+    }
+  }, [dispatch]);
+
+  const queueSync = useCallback(
+    (puzzleId: number | string, foundWords: string[], score: number, streak: number, immediate: boolean) => {
+      pendingSyncRef.current = { puzzleId, foundWords, score, streak };
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+      if (immediate) {
+        return flushSync();
+      }
+      syncTimerRef.current = setTimeout(() => {
+        void flushSync();
+      }, 800);
+      return Promise.resolve(null);
+    },
+    [flushSync]
+  );
 
   const handleSubmit = useCallback(async (): Promise<string | false> => {
     if (!puzzle.activePuzzleId || !puzzle.currentWord.trim() || puzzle.completed) {
@@ -25,6 +88,59 @@ const usePuzzleSubmission = () => {
     submittingRef.current = true;
 
     try {
+      const hasLocalList = (puzzle.validWords?.length ?? 0) > 0;
+
+      if (hasLocalList) {
+        const result = validateWordLocally({
+          raw: puzzle.currentWord,
+          letters: puzzle.letters,
+          centerLetter: puzzle.centerLetter,
+          validWords: puzzle.validWords,
+          pangrams: puzzle.pangrams,
+          alreadyFound: puzzle.wordsFound.map((w) => w.text),
+          streak: puzzle.streak,
+        });
+
+        if (!result.ok) {
+          dispatch(
+            submitWordFailure({
+              retainStreak: result.reason === 'duplicate',
+              reason: result.reason === 'duplicate' ? 'duplicate' : 'invalid',
+              word: puzzle.currentWord.toUpperCase().trim(),
+            })
+          );
+          return REASON_MESSAGES[result.reason] || 'Invalid Word';
+        }
+
+        const nextFound = [...puzzle.wordsFound.map((w) => w.text), result.word];
+        const nextScore = puzzle.score + result.points;
+        const nextStreak = puzzle.streak + 1;
+        const willComplete = nextFound.length >= puzzle.requiredWordsToComplete;
+
+        dispatch(
+          submitWordSuccess({
+            text: result.word,
+            score: result.points,
+            isPangram: result.isPangram,
+            scoreBonusPercent: 0,
+            serverCompleted: false,
+            xpAwarded: 0,
+            coinsAwarded: 0,
+          })
+        );
+
+        await queueSync(
+          puzzle.activePuzzleId,
+          nextFound,
+          nextScore,
+          nextStreak,
+          willComplete
+        );
+
+        return 'valid';
+      }
+
+      // Fallback: no answer list — per-word server submit
       const word = puzzle.currentWord.toUpperCase().trim();
       const alreadyFound = puzzle.wordsFound.some((entry) => entry.text === word);
       if (alreadyFound) {
@@ -50,7 +166,6 @@ const usePuzzleSubmission = () => {
         return REASON_MESSAGES[reason] || 'Invalid Word';
       }
 
-      // Points come from the server — do not apply client card score bonus on top.
       dispatch(
         submitWordSuccess({
           text: word,
@@ -79,6 +194,14 @@ const usePuzzleSubmission = () => {
     puzzle.currentWord,
     puzzle.wordsFound,
     puzzle.completed,
+    puzzle.validWords,
+    puzzle.pangrams,
+    puzzle.letters,
+    puzzle.centerLetter,
+    puzzle.streak,
+    puzzle.score,
+    puzzle.requiredWordsToComplete,
+    queueSync,
   ]);
 
   return { handleSubmit };

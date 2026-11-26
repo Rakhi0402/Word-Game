@@ -72,6 +72,14 @@ class AssetPreloader {
     if (failedCount > 0) {
       console.warn(`[AssetPreloader] ${failedCount}/${total} assets failed to load`);
     }
+
+    // Also warm the Cache Storage API so repeat visits skip network for static media.
+    try {
+      const { warmAssetCache } = await import('../services/cache/clientCache');
+      void warmAssetCache(this.assetsToPreload);
+    } catch {
+      /* Cache API optional */
+    }
   }
 }
 

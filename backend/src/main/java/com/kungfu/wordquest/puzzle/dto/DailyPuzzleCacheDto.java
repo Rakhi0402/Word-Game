@@ -4,13 +4,12 @@ import lombok.Builder;
 import lombok.Value;
 
 import java.util.List;
-import java.util.UUID;
 
 /** Cached immutable daily puzzle definition (no user state). */
 @Value
 @Builder
 public class DailyPuzzleCacheDto {
-    UUID puzzleId;
+    Long puzzleId;
     String difficulty;
     List<String> letters;
     String centerLetter;
@@ -19,4 +18,7 @@ public class DailyPuzzleCacheDto {
     String scheduledDate;
     int xpReward;
     int coinReward;
+    List<String> validWords;
+    List<String> pangrams;
+    int pangramCount;
 }

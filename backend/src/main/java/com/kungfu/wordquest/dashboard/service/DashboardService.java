@@ -131,8 +131,9 @@ public class DashboardService {
 
     private DailyQuestSection buildDailyQuest(User user) {
         LocalDate today = gameClock.today();
+        // Read-only: never call assign/generate here — that marks the TX rollback-only on failure.
         Optional<Puzzle> daily = dailyPuzzleRepository.findByScheduledDateWithPuzzle(today)
-                .map(d -> d.getPuzzle())
+                .map(com.kungfu.wordquest.puzzle.entity.DailyPuzzle::getPuzzle)
                 .or(() -> puzzleRepository.findByPuzzleDate(today));
 
         if (daily.isEmpty()) {

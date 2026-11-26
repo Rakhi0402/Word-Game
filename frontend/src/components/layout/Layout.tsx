@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { TopBar } from './TopBar';
 import { BottomNav } from './BottomNav';
+import { AchievementUnlockBanner } from '../achievements/AchievementUnlockBanner';
 
 export const Layout: React.FC = () => {
   const location = useLocation();
@@ -30,6 +31,7 @@ export const Layout: React.FC = () => {
     <div className="flex min-h-screen flex-col bg-parchment text-jade-dark dark:bg-jade-dark dark:text-parchment">
       {/* Top Navigation */}
       <TopBar />
+      <AchievementUnlockBanner />
 
       <div className="flex flex-1 flex-col md:flex-row">
         {/* Navigation Sidebar (Desktop) / Bottom Bar (Mobile) */}

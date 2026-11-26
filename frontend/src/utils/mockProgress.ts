@@ -18,7 +18,7 @@ export type DailyLockMode = 'day' | 'forever';
 export let DAILY_LOCK_MODE: DailyLockMode = 'day';
 
 export interface DailyCompletionSnapshot {
-  puzzleId: string;
+  puzzleId: number | string;
   date: string;
   difficulty?: PuzzleDifficulty;
   wordsFound: FoundWord[];
@@ -157,7 +157,7 @@ export const yesterdayKey = () => {
 export const dailyCompletionKey = (email: string, date = todayKey()) =>
   `${COMPLETED_PREFIX}${email.trim().toLowerCase()}_${date}`;
 
-export const foreverClearKey = (email: string, puzzleId: string) =>
+export const foreverClearKey = (email: string, puzzleId: number | string) =>
   `${FOREVER_PREFIX}${email.trim().toLowerCase()}_${puzzleId}`;
 
 const parseSnapshot = (raw: string | null): DailyCompletionSnapshot | null => {
@@ -183,7 +183,10 @@ export const isDailyCompleted = (email: string): boolean => {
  * includes a puzzleId that matches today's scheduled puzzle.
  * Malformed/legacy records (no puzzleId) are cleared so the daily can open.
  */
-export const isTodaysDailyCompleted = (email: string, todaysPuzzleId: string): boolean => {
+export const isTodaysDailyCompleted = (
+  email: string,
+  todaysPuzzleId: number | string
+): boolean => {
   if (DAILY_LOCK_MODE === 'forever') {
     return isPuzzleClearedForever(email, todaysPuzzleId);
   }
@@ -199,7 +202,7 @@ export const isTodaysDailyCompleted = (email: string, todaysPuzzleId: string): b
     clearDailyCompletion(email);
     return false;
   }
-  if (snap.puzzleId !== todaysPuzzleId) {
+  if (String(snap.puzzleId) !== String(todaysPuzzleId)) {
     clearDailyCompletion(email);
     return false;
   }
@@ -236,7 +239,7 @@ export const clearDailyCompletion = (email: string) => {
   localStorage.removeItem(dailyCompletionKey(email));
 };
 
-export const isPuzzleClearedForever = (email: string, puzzleId: string): boolean => {
+export const isPuzzleClearedForever = (email: string, puzzleId: number | string): boolean => {
   try {
     return Boolean(localStorage.getItem(foreverClearKey(email, puzzleId)));
   } catch {
@@ -246,13 +249,16 @@ export const isPuzzleClearedForever = (email: string, puzzleId: string): boolean
 
 export const markPuzzleClearedForever = (
   email: string,
-  puzzleId: string,
+  puzzleId: number | string,
   snapshot: DailyCompletionSnapshot
 ) => {
   localStorage.setItem(foreverClearKey(email, puzzleId), JSON.stringify(snapshot));
 };
 
-export const loadForeverClear = (email: string, puzzleId: string): DailyCompletionSnapshot | null => {
+export const loadForeverClear = (
+  email: string,
+  puzzleId: number | string
+): DailyCompletionSnapshot | null => {
   try {
     return parseSnapshot(localStorage.getItem(foreverClearKey(email, puzzleId)));
   } catch {
@@ -263,10 +269,10 @@ export const loadForeverClear = (email: string, puzzleId: string): DailyCompleti
 /** Load best available completion snapshot for review (today first, then forever archive). */
 export const loadCompletionForReview = (
   email: string,
-  puzzleId?: string
+  puzzleId?: number | string
 ): DailyCompletionSnapshot | null => {
   const today = loadDailyCompletion(email);
-  if (today && (!puzzleId || today.puzzleId === puzzleId)) return today;
+  if (today && (!puzzleId || String(today.puzzleId) === String(puzzleId))) return today;
   if (puzzleId) return loadForeverClear(email, puzzleId);
   return today;
 };

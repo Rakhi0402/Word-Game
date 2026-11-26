@@ -1,15 +1,14 @@
 package com.kungfu.wordquest.dictionary;
 
 import com.kungfu.wordquest.puzzle.entity.Puzzle;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * Persists immutable per-puzzle playable word snapshots.
@@ -20,12 +19,16 @@ public class PuzzleWordSnapshotService {
 
     private final PuzzleWordRepository puzzleWordRepository;
     private final WordNormalizer normalizer;
+    private final EntityManager entityManager;
 
     @Transactional
     public void replaceSnapshot(Puzzle puzzle, List<String> playableWords, List<String> pangrams) {
         if (puzzle.getId() == null) {
             throw new IllegalArgumentException("Puzzle must be persisted before snapshotting words");
         }
+        // Ensure parent puzzle row is written before puzzle_words (Hibernate JDBC batch reorder)
+        entityManager.flush();
+
         puzzleWordRepository.deleteAllByPuzzleId(puzzle.getId());
 
         Set<String> pangramSet = new HashSet<>();
@@ -52,14 +55,14 @@ public class PuzzleWordSnapshotService {
     }
 
     @Transactional(readOnly = true)
-    public boolean isPlayableWord(UUID puzzleId, String rawWord) {
+    public boolean isPlayableWord(Long puzzleId, String rawWord) {
         return normalizer.normalize(rawWord)
                 .map(n -> puzzleWordRepository.existsByPuzzleIdAndNormalizedWord(puzzleId, n))
                 .orElse(false);
     }
 
     @Transactional(readOnly = true)
-    public boolean isPangramSnapshot(UUID puzzleId, String rawWord) {
+    public boolean isPangramSnapshot(Long puzzleId, String rawWord) {
         return normalizer.normalize(rawWord)
                 .flatMap(n -> puzzleWordRepository.findByPuzzleIdAndNormalizedWord(puzzleId, n))
                 .map(PuzzleWord::isPangram)
@@ -67,12 +70,12 @@ public class PuzzleWordSnapshotService {
     }
 
     @Transactional(readOnly = true)
-    public long countWords(UUID puzzleId) {
+    public long countWords(Long puzzleId) {
         return puzzleWordRepository.countByPuzzleId(puzzleId);
     }
 
     @Transactional(readOnly = true)
-    public List<String> displayWords(UUID puzzleId) {
+    public List<String> displayWords(Long puzzleId) {
         return puzzleWordRepository.findByPuzzleId(puzzleId).stream()
                 .map(PuzzleWord::getDisplayWord)
                 .toList();
